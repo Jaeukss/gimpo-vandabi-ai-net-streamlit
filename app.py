@@ -48,6 +48,13 @@ with top_cols[1]:
 with top_cols[2]:
     render_metric_card("안전 고지", "필수", DATA_FALLBACK_NOTICE, "warning")
 
+render_info_card(
+    "GitHub / Streamlit Cloud 시연 안내",
+    "공개 저장소와 Streamlit Cloud 시연용 MVP입니다. 배포 URL은 Streamlit Cloud 배포 URL 입력 예정으로 관리합니다.",
+    "Demo",
+    "info",
+)
+
 render_section_header("SERVICE AREAS", "B2C / B2G 사용 영역", "사용자 분석 흐름과 기관 검토 흐름을 분리해 표시합니다.")
 
 b2c, b2g = st.columns(2)
