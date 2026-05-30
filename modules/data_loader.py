@@ -161,7 +161,7 @@ def _mobility_center_mock() -> pd.DataFrame:
         [
             {
                 "기관명": "김포시 교통약자 이동지원센터",
-                "운영상태": "prototype_dummy",
+                "운영상태": "시연용 점검 지표",
                 "확인필요": "운영기관 검토 필요",
             }
         ]
@@ -173,7 +173,7 @@ def _protected_zone_mock() -> pd.DataFrame:
         [
             {
                 "구역명": "노인장애인보호구역 예시",
-                "상태": "prototype_dummy",
+                "상태": "시연용 점검 지표",
                 "확인필요": "현장 상태 확인 필요",
             }
         ]
@@ -186,7 +186,7 @@ def _low_floor_bus_mock() -> pd.DataFrame:
             {
                 "지역": "김포시",
                 "항목": "저상버스 운행 노선수",
-                "상태": "prototype_dummy",
+                "상태": "시연용 점검 지표",
                 "확인필요": "공공데이터 최신성 확인 필요",
             }
         ]

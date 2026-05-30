@@ -53,7 +53,7 @@ def s(text: Any) -> str:
 def folder_status(path: str, pattern: str = "*") -> dict[str, str | int]:
     base = Path(path)
     if not base.exists() or not base.is_dir():
-        return {"folder": path, "status": "prototype_dummy", "count": 0}
+        return {"folder": path, "status": "empty", "count": 0}
     try:
         return {"folder": path, "status": "available", "count": len([item for item in base.glob(pattern) if item.is_file()])}
     except Exception:
@@ -63,7 +63,7 @@ def folder_status(path: str, pattern: str = "*") -> dict[str, str | int]:
 def status_style(status: str) -> str:
     if status in {"configured", "enabled_ready", "loaded", "real_api", "real_csv"}:
         return "success"
-    if status in {"real_api_no_data", "disabled", "fallback", "mock_fallback", "prototype_dummy", "missing_model", "missing_params", "missing_key"}:
+    if status in {"real_api_no_data", "disabled", "fallback", "mock_fallback", "missing_model", "missing_params", "missing_key"}:
         return "warning"
     if status in {"missing", "missing_config", "empty", "api_error", "timeout", "network_error", "parse_error"}:
         return "danger"
@@ -142,12 +142,12 @@ sample_scores = [
 average_score = round(sum(sample_scores) / len(sample_scores), 1)
 configured_count = sum(1 for status in config_status.values() if status in {"configured", "enabled"})
 
-render_section_header("KPI", "파일럿 KPI 카드", "운영 실적이 아닌 prototype_dummy 점검 수치입니다.")
+render_section_header("KPI", "파일럿 KPI 카드", "표시된 운영 지표는 파일럿 시연용 점검 수치입니다.")
 kpi_cards = [
     ("RAG 문서", rag_index.data_status, f"chunks={len(rag_index.chunks)}", "info"),
     ("CSV 파일", len(inventory), "탐색된 파일 수", "success" if not inventory.empty else "warning"),
     ("Secrets 상태", f"{configured_count}/{len(config_status)}", "값 미표시", "purple"),
-    ("이동 가능성 평균", average_score, "prototype_dummy", "warning"),
+    ("이동 가능성 평균", average_score, "파일럿 지표", "warning"),
 ]
 cols = st.columns(4)
 for col, (label, value, helper, status) in zip(cols, kpi_cards):
@@ -155,9 +155,9 @@ for col, (label, value, helper, status) in zip(cols, kpi_cards):
         render_metric_card(label, value, helper, status)
 
 render_status_badge("파일럿 상태 점검", "info")
-render_status_badge("prototype_dummy 포함", "warning")
+render_status_badge("시연용 점검 지표 포함", "warning")
 render_status_badge("키 값 미표시", "success")
-render_warning_box("표시된 운영 지표는 파일럿 대시보드 예시이며 실제 운영 통계가 아닙니다.")
+render_warning_box("표시된 운영 지표는 파일럿 시연용 점검 수치입니다. 실제 운영 통계가 아닌 MVP 검증용 지표입니다.")
 
 render_section_header("SECRETS QA", "Secrets 기반 QA 상태", "실제 키 값, 일부 마스킹 값, 길이 정보는 표시하지 않습니다.")
 text_model_status = "configured" if config_status.get("OPENROUTER_API_KEY") == "configured" and config_status.get("OPENROUTER_MODEL") == "configured" else "fallback"
@@ -169,34 +169,38 @@ csv_status = "loaded" if not inventory.empty else "empty"
 qa_rows = [
     {"item": "OpenRouter Text Model", "status": text_model_status, "note": "버튼 실행 시에만 연결 테스트"},
     {"item": "OpenRouter Vision Model", "status": vision_model_status, "note": "이미지 분석은 업로드 후에만 실행"},
-    {"item": "VWorld API Key", "status": vworld_key_status, "note": "주소 변환 실패 시 mock 좌표 사용"},
+    {"item": "VWorld API Key", "status": vworld_key_status, "note": "주소 변환 실패 시 시연용 대체 좌표 사용"},
     {"item": "DATA GO KR Key", "status": data_go["data_status"], "note": "공공데이터 7종은 별도 버튼으로만 호출"},
     {"item": "SendGrid", "status": sendgrid_status, "note": "기본 disabled 권장"},
     {"item": "RAG Docs", "status": rag_docs_status, "note": rag_index.data_status},
-    {"item": "CSV Data", "status": csv_status, "note": "real_csv 또는 mock_fallback"},
+    {"item": "CSV Data", "status": csv_status, "note": "real_csv 또는 안전 대체 데이터"},
 ]
 st.dataframe(pd.DataFrame(qa_rows), width="stretch")
 
 qa_cols = st.columns(3)
 with qa_cols[0]:
-    if st.button("OpenRouter 텍스트 간단 연결 테스트", use_container_width=True):
+    if st.button("OpenRouter 텍스트 간단 연결 테스트", width="stretch"):
         result = test_openrouter_text_connection()
         render_status_badge(s(result["status"]), status_style(str(result["status"])))
         st.caption(s(f"source={result['source']} reason={result['reason']}"))
         st.write(s(result["text"]))
 with qa_cols[1]:
-    if st.button("Vision 설정 상태 확인", use_container_width=True):
+    if st.button("Vision 설정 상태 확인", width="stretch"):
         result = test_vision_model_available()
         render_status_badge(s(result["status"]), status_style(str(result["status"])))
         st.caption(s(f"source={result['source']} reason={result['reason']}"))
         st.write(s(result["message"]))
 with qa_cols[2]:
-    if st.button("VWorld 주소 변환 간단 테스트", use_container_width=True):
+    if st.button("VWorld 주소 변환 간단 테스트", width="stretch"):
         result = test_vworld_geocode_connection()
         render_status_badge(s(result["status"]), status_style(str(result["status"])))
         st.caption(s(f"reason={result['reason']} has_coordinate={result['has_coordinate']}"))
+        if result.get("status") != "real_api":
+            render_warning_box("VWorld 주소 변환 API가 일시적으로 응답하지 않아 시연용 대체 좌표를 사용할 수 있습니다. 좌표는 참고용이며 실제 현장 위치 검증이 필요합니다.")
 
 render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")
+render_disclaimer_box("real_api는 실제 공공데이터 응답을 받은 상태입니다. real_api_no_data는 API 호출은 정상이나 현재 조건에 해당하는 데이터가 없는 상태입니다. fallback은 실API 성공이 아니라 앱 안정성을 위한 대체 응답입니다.")
+render_disclaimer_box("TAGO 버스도착정보는 실시간 데이터 특성상 현재 시점에 도착 예정 정보가 없을 수 있습니다.")
 tago_cols = st.columns(4)
 with tago_cols[0]:
     tago_route_no = st.text_input("TAGO routeNo", value=DEFAULT_TAGO_ROUTE_NO, help="기본 시연값입니다. 직접 수정할 수 있습니다.")
@@ -207,7 +211,7 @@ with tago_cols[2]:
 with tago_cols[3]:
     tago_node_id = st.text_input("TAGO nodeId", value="", help="직접 입력값이 있으면 도착정보에 우선 사용합니다.")
 
-if st.button("공공데이터 7종 상태 점검", use_container_width=True):
+if st.button("공공데이터 7종 상태 점검", width="stretch"):
     st.session_state["public_data_api_results"] = run_public_data_api_checks(tago_city_code, tago_node_id, tago_route_id, tago_route_no)
     st.session_state["public_data_api_tago_inputs"] = {
         "route_no": tago_route_no or DEFAULT_TAGO_ROUTE_NO,
@@ -220,6 +224,10 @@ public_api_results = st.session_state.get("public_data_api_results")
 if public_api_results:
     rows = public_api_result_rows(public_api_results)
     st.dataframe(pd.DataFrame(rows), width="stretch")
+    for item in public_api_results:
+        if item.get("service_name") == "TAGO 버스도착정보" and item.get("status") == "real_api_no_data":
+            render_disclaimer_box("버스도착정보 API는 정상 응답했으나, 현재 선택된 정류소/노선 조건에 도착 예정 데이터가 없습니다. 실시간 API 특성상 일시적으로 데이터가 없을 수 있습니다.")
+            break
     api_cols = st.columns(5)
     real_success_count = sum(1 for item in public_api_results if item.get("status") == "real_api")
     real_no_data_count = sum(1 for item in public_api_results if item.get("status") == "real_api_no_data")
@@ -230,7 +238,7 @@ if public_api_results:
     with api_cols[1]:
         render_metric_card("real_api_no_data", real_no_data_count, "정상 응답 결과 없음", "warning" if real_no_data_count else "muted")
     with api_cols[2]:
-        render_metric_card("fallback/오류", fallback_count, "성공 외 상태", "danger" if fallback_count else "success")
+        render_metric_card("대체/오류", fallback_count, "실API 성공 외 상태", "danger" if fallback_count else "success")
     with api_cols[3]:
         render_metric_card("DATA GO KR", data_go["data_status"], "키 값 미표시", "info" if data_go["data_status"] == "configured" else "warning")
     with api_cols[4]:
@@ -241,10 +249,10 @@ else:
 render_section_header("CHART", "운영 참고 차트", "plotly 사용 가능 시 plotly, 실패 시 Streamlit bar chart로 표시합니다.")
 chart_frame = pd.DataFrame(
     [
-        {"metric": "이동 가능성 평균", "value": average_score, "status": "prototype_dummy"},
-        {"metric": "이동지원 후보 요청", "value": 7, "status": "prototype_dummy"},
-        {"metric": "AI 제보 검토 대기", "value": 3, "status": "prototype_dummy"},
-        {"metric": "생활체육 리포트", "value": 5, "status": "prototype_dummy"},
+        {"metric": "이동 가능성 평균", "value": average_score, "status": "파일럿 지표"},
+        {"metric": "이동지원 후보 요청", "value": 7, "status": "시연용 점검 지표"},
+        {"metric": "AI 제보 검토 대기", "value": 3, "status": "시연용 점검 지표"},
+        {"metric": "생활체육 리포트", "value": 5, "status": "시연용 점검 지표"},
     ]
 )
 render_chart(chart_frame)
@@ -266,7 +274,7 @@ st.dataframe(pd.DataFrame(detail_rows), width="stretch")
 
 with st.expander("CSV Inventory"):
     if inventory.empty:
-        render_warning_box("탐색된 CSV가 없습니다. prototype_dummy 상태로 화면은 유지됩니다.")
+        render_warning_box("탐색된 CSV가 없습니다. 실API 미응답 시 안전 대체 상태로 화면은 유지됩니다.")
         st.dataframe(pd.DataFrame(columns=["file_name", "path", "rows", "columns", "status", "data_status"]), width="stretch")
     else:
         st.dataframe(inventory, width="stretch")

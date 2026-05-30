@@ -31,7 +31,7 @@ with st.sidebar:
     render_section_header("ACCESSIBILITY", "접근성 안내", "고대비 카드 UI와 명확한 텍스트 배지를 사용합니다.")
     voice_result = render_voice_command_box("app_sidebar")
     render_status_badge(f"intent={voice_result['intent']}", "info")
-    render_disclaimer_box("음성 입력은 optional입니다. 음성 파일은 저장하지 않으며 텍스트 fallback을 제공합니다.")
+    render_disclaimer_box("음성 입력은 optional입니다. 음성 파일은 저장하지 않으며 텍스트 대체 입력을 제공합니다.")
 
 render_app_header(
     "김포 반다비 AI Net 파일럿",
@@ -42,7 +42,7 @@ render_disclaimer_box(SERVICE_DISCLAIMER)
 
 top_cols = st.columns(3)
 with top_cols[0]:
-    render_metric_card("서비스 상태", "파일럿", "fallback 우선 구조", "info")
+    render_metric_card("서비스 상태", "파일럿", "실API 미응답 시 안전 대체", "info")
 with top_cols[1]:
     render_metric_card("RAG 문서", "BM25", ".md · .md.md · .txt", "purple")
 with top_cols[2]:
@@ -85,11 +85,11 @@ page_cols_2 = st.columns(3)
 with page_cols_2[0]:
     render_info_card("04 AI 비전검증", "이미지 제보를 임시 검토 결과로 정리합니다.", "04", "warning")
 with page_cols_2[1]:
-    render_info_card("05 B2G 대시보드", "파일럿 상태와 fallback 사용 여부를 점검합니다.", "05", "success")
+    render_info_card("05 B2G 대시보드", "파일럿 상태와 대체 응답 사용 여부를 점검합니다.", "05", "success")
 with page_cols_2[2]:
     render_info_card("06 공문 초안", "관리자 검증용 초안과 발송 안전장치를 분리합니다.", "06", "info")
 
-render_section_header("RAG TEST", "RAG 문서 질문 테스트", "`docs/` 문서를 BM25로 검색하고 OpenRouter 또는 로컬 fallback 답변을 표시합니다.")
+render_section_header("RAG TEST", "RAG 문서 질문 테스트", "`docs/` 문서를 BM25로 검색하고 OpenRouter 또는 로컬 대체 답변을 표시합니다.")
 rag_index = rag_bm25.build_index("docs")
 
 rag_stats = st.columns(3)
@@ -130,13 +130,13 @@ with st.container():
                 width="stretch",
             )
             else:
-                render_warning_box("검색된 문서 근거가 없습니다. fallback 답변을 표시합니다.")
+                render_warning_box("검색된 문서 근거가 없습니다. 로컬 대체 답변을 표시합니다.")
 
             with st.expander("검색 context"):
                 st.text_area("context", context, height=260)
 
             answer = llm_client.generate_rag_answer(rag_question, context)
-            render_section_header("ANSWER", "답변", "OpenRouter 실패 또는 키 누락 시 로컬 fallback을 사용합니다.")
+            render_section_header("ANSWER", "답변", "OpenRouter 실패 또는 키 누락 시 로컬 대체 답변을 사용합니다.")
             st.write(s(str(answer["text"])))
             render_browser_tts_button(str(answer["text"])[:700])
             render_status_badge(f"source={answer.get('source', 'fallback')}", "muted")

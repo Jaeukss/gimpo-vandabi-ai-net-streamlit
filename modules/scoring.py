@@ -7,7 +7,7 @@ from typing import Any
 from modules.safety import sanitize_public_claims
 
 
-LIMITATION_TEXT = "접근성 점수는 공공데이터와 프로토타입 기준의 참고 점수이며, 실제 현장 상태와 다를 수 있습니다."
+LIMITATION_TEXT = "접근성 점수는 공공데이터와 파일럿 기준의 참고 점수이며, 실제 현장 상태와 다를 수 있습니다."
 
 
 def grade_score(score: int) -> str:
@@ -67,7 +67,7 @@ def calculate_viable_path_score(inputs: dict[str, Any]) -> dict[str, Any]:
     recommended_actions: list[str] = []
 
     if origin_status != "real_api" or destination_status != "real_api":
-        risk_factors.append("주소 좌표가 mock 기준일 수 있음")
+        risk_factors.append("주소 좌표가 시연용 대체 좌표 기준일 수 있음")
         recommended_actions.append("출발지와 목적지 주소를 운영기관 검토 전에 재확인")
     if mobility_needed:
         risk_factors.append("이동지원 후보 검토 필요")
@@ -76,7 +76,7 @@ def calculate_viable_path_score(inputs: dict[str, Any]) -> dict[str, Any]:
         risk_factors.append(f"접근성 지원 유형: {support_type}")
         recommended_actions.append("도착지의 승강기, 보행 동선, 안내 지원 가능 여부 확인")
     if weather_enabled:
-        risk_factors.append("날씨 영향은 stub 기준")
+        risk_factors.append("날씨 영향은 API 또는 안전 대체 응답 기준")
         recommended_actions.append("이용 당일 기상 상태와 노면 상태 확인")
     if not public_transport_available:
         risk_factors.append("대중교통 대안이 제한될 수 있음")
@@ -101,7 +101,7 @@ def calculate_viable_path_score(inputs: dict[str, Any]) -> dict[str, Any]:
         "data_sources": [
             "사용자 입력",
             f"VWorld geocode status: origin={origin_status}, destination={destination_status}",
-            "공공데이터 및 프로토타입 fallback",
+            "공공데이터 및 안전 대체 응답",
         ],
         "limitations": [LIMITATION_TEXT],
     }
@@ -114,7 +114,7 @@ def explain_score(result: dict[str, Any]) -> str:
     level = str(result.get("mobility_level", grade_score(score)))
     risks = ", ".join(result.get("risk_factors", []))
     text = (
-        f"{result.get('ai_name', 'Viable Path Scoring AI')}는 입력값과 fallback 데이터를 기준으로 "
+        f"{result.get('ai_name', 'Viable Path Scoring AI')}는 입력값과 공공데이터 또는 안전 대체 응답을 기준으로 "
         f"{score}점, '{level}' 등급을 산출했습니다. 주요 확인 항목은 {risks}입니다. "
         f"{LIMITATION_TEXT}"
     )

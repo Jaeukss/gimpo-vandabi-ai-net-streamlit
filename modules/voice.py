@@ -45,7 +45,7 @@ def voice_status() -> dict[str, str | bool]:
         return {
             "available": False,
             "data_status": "text_fallback",
-            "message": sanitize_public_claims("음성 입력 컴포넌트가 없어 텍스트 fallback을 사용합니다."),
+            "message": sanitize_public_claims("음성 입력 컴포넌트가 없어 텍스트 대체 입력을 사용합니다."),
         }
 
 
@@ -61,10 +61,10 @@ def render_voice_command_box(key: str = "voice_command") -> dict[str, str]:
             mic_recorder(start_prompt="녹음 시작", stop_prompt="녹음 종료", key=f"{key}_mic")
             st.caption(sanitize_public_claims("STT는 현재 placeholder입니다. 필요한 명령은 아래 텍스트로 입력합니다."))
         except Exception:
-            st.caption(sanitize_public_claims("음성 컴포넌트 호출 실패로 텍스트 fallback을 사용합니다."))
+            st.caption(sanitize_public_claims("음성 컴포넌트 호출 실패로 텍스트 대체 입력을 사용합니다."))
 
     command_text = st.text_input(
-        "음성 명령 텍스트 fallback",
+        "음성 명령 텍스트 대체 입력",
         placeholder="예: 경로 분석해줘, 공문 초안 만들어줘",
         key=f"{key}_text",
     )

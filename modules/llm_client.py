@@ -64,14 +64,14 @@ def generate_with_openrouter(
     if not api_key:
         return _fallback_result(
             "fallback_missing_key",
-            "OpenRouter 키가 설정되지 않아 로컬 fallback 답변을 사용합니다.",
+            "OpenRouter 키가 설정되지 않아 로컬 대체 답변을 사용합니다.",
             "missing_key",
         )
 
     if not model:
         return _fallback_result(
             "fallback_missing_model",
-            "OpenRouter 모델 설정이 없어 로컬 fallback 답변을 사용합니다.",
+            "OpenRouter 모델 설정이 없어 로컬 대체 답변을 사용합니다.",
             "missing_model",
         )
 
@@ -80,7 +80,7 @@ def generate_with_openrouter(
     except Exception:
         return _fallback_result(
             "fallback_sdk_import_error",
-            "OpenAI SDK를 불러오지 못해 로컬 fallback 답변을 사용합니다.",
+            "OpenAI SDK를 불러오지 못해 로컬 대체 답변을 사용합니다.",
             "sdk_import_error",
         )
 
@@ -101,7 +101,7 @@ def generate_with_openrouter(
         if not text.strip():
             return _fallback_result(
                 "fallback_empty_response",
-                "OpenRouter 응답이 비어 있어 로컬 fallback 답변을 사용합니다.",
+                "OpenRouter 응답이 비어 있어 로컬 대체 답변을 사용합니다.",
                 "empty_response",
             )
         return {
@@ -115,7 +115,7 @@ def generate_with_openrouter(
         reason = _classify_exception(exc)
         return _fallback_result(
             f"fallback_{reason}",
-            "OpenRouter 호출이 실패해 로컬 fallback 답변을 사용합니다.",
+            "OpenRouter 호출이 실패해 로컬 대체 답변을 사용합니다.",
             reason,
         )
 

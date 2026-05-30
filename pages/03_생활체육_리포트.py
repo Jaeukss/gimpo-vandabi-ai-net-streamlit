@@ -39,7 +39,7 @@ def api_status_line(result: dict) -> str:
         return f"실응답 {result.get('real_count', 0)}건"
     if status == "real_api_no_data":
         return "검색 조건 기준 결과 없음"
-    return "시설 API 실응답 확인 실패, RAG/fallback 사용"
+    return "시설 API 실응답 확인 실패, RAG/대체 응답 사용"
 
 
 def facility_rows(*results: dict) -> list[dict]:
@@ -171,9 +171,9 @@ if saved:
     with cols[1]:
         render_metric_card("문서 상태", saved["rag_status"], f"results={saved['rag_count']}", "info")
     with cols[2]:
-        render_metric_card("시설 API", facility_result["status"], f"real={facility_result.get('real_count', 0)} fallback={facility_result.get('fallback_count', 0)}", "success" if facility_result["status"] == "real_api" else "warning")
+        render_metric_card("시설 API", facility_result["status"], f"real={facility_result.get('real_count', 0)} 대체={facility_result.get('fallback_count', 0)}", "success" if facility_result["status"] == "real_api" else "warning")
     with cols[3]:
-        render_metric_card("상세 API", detail_result["status"], f"real={detail_result.get('real_count', 0)} fallback={detail_result.get('fallback_count', 0)}", "success" if detail_result["status"] == "real_api" else "warning")
+        render_metric_card("상세 API", detail_result["status"], f"real={detail_result.get('real_count', 0)} 대체={detail_result.get('fallback_count', 0)}", "success" if detail_result["status"] == "real_api" else "warning")
     render_metric_card("문장 개선", saved["source"], "OpenRouter optional", "muted")
     render_info_card("리포트", saved["report"], status="info")
     render_disclaimer_box(REQUIRED_NOTICE)
@@ -189,7 +189,7 @@ if saved:
         elif facility_result["status"] == "real_api_no_data" or detail_result["status"] == "real_api_no_data":
             st.write("검색 조건 기준 결과 없음 상태입니다.")
         else:
-            st.write("시설 API 실응답 확인 실패, RAG/fallback 사용 상태입니다.")
+            st.write("시설 API 실응답 확인 실패, RAG/대체 응답 사용 상태입니다.")
 
     with st.expander("RAG 참고 근거"):
         if saved["results"]:

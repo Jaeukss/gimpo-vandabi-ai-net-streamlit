@@ -114,15 +114,15 @@ def _status_message(status: str) -> str:
     messages = {
         "real_api": "공공데이터 API 실응답을 사용했습니다.",
         "real_api_no_data": "공공데이터 API 정상 응답이나 검색 조건 기준 결과가 없습니다.",
-        "missing_key": "DATA_GO_KR_SERVICE_KEY가 없어 fallback 데이터를 사용합니다.",
-        "missing_params": "필수 파라미터가 부족해 fallback 데이터를 사용합니다.",
-        "api_error": "API 응답 상태가 정상으로 확인되지 않아 fallback 데이터를 사용합니다.",
-        "timeout": "API timeout으로 fallback 데이터를 사용합니다.",
-        "network_error": "네트워크 오류로 fallback 데이터를 사용합니다.",
-        "parse_error": "응답 파싱 실패로 fallback 데이터를 사용합니다.",
-        "fallback": "fallback 데이터를 사용합니다.",
+        "missing_key": "DATA_GO_KR_SERVICE_KEY가 없어 대체 응답을 사용합니다.",
+        "missing_params": "필수 파라미터가 부족해 대체 응답을 사용합니다.",
+        "api_error": "API 응답 상태가 정상으로 확인되지 않아 대체 응답을 사용합니다.",
+        "timeout": "API timeout으로 대체 응답을 사용합니다.",
+        "network_error": "네트워크 오류로 대체 응답을 사용합니다.",
+        "parse_error": "응답 파싱 실패로 대체 응답을 사용합니다.",
+        "fallback": "대체 응답을 사용합니다.",
     }
-    return messages.get(status, "fallback 데이터를 사용합니다.")
+    return messages.get(status, "대체 응답을 사용합니다.")
 
 
 def _clean_item(value: Any) -> Any:
@@ -583,11 +583,11 @@ def _with_fallback(result: dict[str, Any], fallback_items: list[dict[str, Any]],
 
 
 def _sports_facility_fallback() -> list[dict[str, Any]]:
-    return [{"facility_name": "김포반다비체육센터", "area": "김포", "data_type": "fallback_sample", "note": "시설 API 실응답 확인 실패 시 표시되는 샘플"}]
+    return [{"facility_name": "김포반다비체육센터", "area": "김포", "data_type": "fallback_sample", "note": "시설 API 실응답 확인 실패 시 표시되는 대체 샘플"}]
 
 
 def _disabled_convenience_fallback() -> list[dict[str, Any]]:
-    return [{"facility_name": "김포 접근성 편의시설 참고 샘플", "area": "김포", "data_type": "fallback_sample", "note": "장애인편의시설 API 실응답 확인 실패 시 표시되는 샘플"}]
+    return [{"facility_name": "김포 접근성 편의시설 참고 샘플", "area": "김포", "data_type": "fallback_sample", "note": "장애인편의시설 API 실응답 확인 실패 시 표시되는 대체 샘플"}]
 
 
 def _mobility_support_fallback() -> list[dict[str, Any]]:
@@ -595,15 +595,15 @@ def _mobility_support_fallback() -> list[dict[str, Any]]:
 
 
 def _weather_fallback() -> list[dict[str, Any]]:
-    return [{"category": "weather_summary", "summary": "기상 API fallback: 현장 상태와 최신 예보 확인 필요", "route_impact": "주의", "data_type": "fallback_sample"}]
+    return [{"category": "weather_summary", "summary": "기상 API 대체 응답: 현장 상태와 최신 예보 확인 필요", "route_impact": "주의", "data_type": "fallback_sample"}]
 
 
 def _bus_arrival_fallback() -> list[dict[str, Any]]:
-    return [{"service": "TAGO 버스도착정보", "status": "missing_params_or_fallback", "data_type": "fallback_sample"}]
+    return [{"service": "TAGO 버스도착정보", "status": "파라미터 확인 필요", "data_type": "fallback_sample"}]
 
 
 def _bus_route_fallback() -> list[dict[str, Any]]:
-    return [{"service": "TAGO 버스노선정보", "status": "missing_params_or_fallback", "data_type": "fallback_sample"}]
+    return [{"service": "TAGO 버스노선정보", "status": "파라미터 확인 필요", "data_type": "fallback_sample"}]
 
 
 def fetch_sports_facilities(keyword: str = "김포", page_no: int = 1, num_of_rows: int = 10) -> dict[str, Any]:
@@ -619,7 +619,7 @@ def fetch_sports_facilities(keyword: str = "김포", page_no: int = 1, num_of_ro
         filtered = _keyword_filter(result["items"], (keyword, "김포", "반다비"))
         if filtered:
             result = make_api_result(service_name, "real_api", items=filtered, source="public_data", endpoint_name=result["endpoint_name"], reason_code=result["reason_code"], summary=result["summary"])
-    return _with_fallback(result, _sports_facility_fallback(), "fallback sample입니다.", "cp_nm/cpb_nm 또는 시설명 파라미터 확인")
+    return _with_fallback(result, _sports_facility_fallback(), "대체 샘플입니다.", "cp_nm/cpb_nm 또는 시설명 파라미터 확인")
 
 
 def fetch_sports_facility_detail(facility_id: str | None = None, facility_name: str = "김포반다비체육센터") -> dict[str, Any]:
@@ -634,7 +634,7 @@ def fetch_sports_facility_detail(facility_id: str | None = None, facility_name: 
     if facility_id:
         param_sets.insert(0, ("facility_id", {"pageNo": 1, "numOfRows": 10, "resultType": "JSON", "faci_id": facility_id}, False))
     result = _call_param_sets(SPORTS_FACILITY_DETAIL_URL, "TODZ_SFMS_FACIL_INFO", service_name, param_sets[:4])
-    return _with_fallback(result, _sports_facility_fallback(), "fallback sample입니다.", "fmng_cp_nm/fmng_cpb_nm 또는 시설명 파라미터 확인")
+    return _with_fallback(result, _sports_facility_fallback(), "대체 샘플입니다.", "fmng_cp_nm/fmng_cpb_nm 또는 시설명 파라미터 확인")
 
 
 def fetch_disabled_convenience_facilities(keyword: str = "김포", page_no: int = 1, num_of_rows: int = 20) -> dict[str, Any]:
@@ -649,7 +649,7 @@ def fetch_disabled_convenience_facilities(keyword: str = "김포", page_no: int 
         filtered = _keyword_filter(result["items"], (keyword, "반다비"))
         if filtered:
             result = make_api_result(service_name, "real_api", items=filtered, source="public_data", endpoint_name=result["endpoint_name"], reason_code=result["reason_code"], summary=result["summary"])
-    return _with_fallback(result, _disabled_convenience_fallback(), "fallback sample입니다.", "XML operation 또는 지역 파라미터 확인")
+    return _with_fallback(result, _disabled_convenience_fallback(), "대체 샘플입니다.", "XML operation 또는 지역 파라미터 확인")
 
 
 def fetch_disabled_convenience_eval_info(wfclt_id: str | None = None) -> dict[str, Any]:
@@ -699,7 +699,7 @@ def fetch_mobility_support_realtime(area: str = "김포", page_no: int = 1, num_
             "vehicle_items": vehicle.get("items", [])[:3],
         }
         return use_result
-    return _with_fallback(use_result, _mobility_support_fallback(), "fallback sample입니다.", "stdgCd 또는 operation 응답 상태 확인")
+    return _with_fallback(use_result, _mobility_support_fallback(), "대체 샘플입니다.", "stdgCd 또는 operation 응답 상태 확인")
 
 
 def _safe_weather_base_time(now: datetime | None = None) -> tuple[str, str]:
@@ -733,7 +733,7 @@ def fetch_weather_short_forecast(nx: int = 55, ny: int = 128, base_date: str | N
         result["summary"] = {**result.get("summary", {}), "weather_summary": summarize_weather_items(result["items"])}
         result["message"] = sanitize_public_claims(result["summary"]["weather_summary"])
         return result
-    fallback = _with_fallback(result, _weather_fallback(), "기상청 단기예보 fallback sample입니다.", "base_date/base_time 또는 API 운영 상태 확인")
+    fallback = _with_fallback(result, _weather_fallback(), "기상청 단기예보 대체 샘플입니다.", "base_date/base_time 또는 API 운영 상태 확인")
     fallback["summary"] = {**fallback.get("summary", {}), "weather_summary": _weather_fallback()[0]["summary"]}
     return fallback
 
@@ -839,7 +839,7 @@ def fetch_bus_route(city_code: str | None = None, route_id: str | None = None, r
     service_name = "TAGO 버스노선정보"
     selected_city_code, city_result = find_tago_city_code("김포", city_code)
     if not selected_city_code:
-        return _with_fallback(city_result, _bus_route_fallback(), "fallback sample입니다.", "cityCode 직접 입력")
+        return _with_fallback(city_result, _bus_route_fallback(), "대체 샘플입니다.", "cityCode 직접 입력")
     selected_route_id = route_id
     route_list = None
     if not selected_route_id:
@@ -847,7 +847,7 @@ def fetch_bus_route(city_code: str | None = None, route_id: str | None = None, r
         if route_list["status"] != "real_api":
             if route_list["status"] == "real_api_no_data":
                 return route_list
-            return _with_fallback(route_list, _bus_route_fallback(), "fallback sample입니다.", "routeNo 또는 cityCode 확인")
+            return _with_fallback(route_list, _bus_route_fallback(), "대체 샘플입니다.", "routeNo 또는 cityCode 확인")
         for item in route_list["items"]:
             if isinstance(item, dict):
                 selected_route_id = _first_value(item, ("routeid", "routeId", "routeID"))
@@ -874,7 +874,7 @@ def fetch_bus_route(city_code: str | None = None, route_id: str | None = None, r
             "route_info_real_count": route_info["real_count"],
         }
         return representative
-    return _with_fallback(representative, _bus_route_fallback(), "fallback sample입니다.", "routeId 기반 노선 상세 operation 확인")
+    return _with_fallback(representative, _bus_route_fallback(), "대체 샘플입니다.", "routeId 기반 노선 상세 operation 확인")
 
 
 def fetch_tago_arrivals_by_station(city_code: str | None, node_id: str | None) -> dict[str, Any]:
@@ -910,14 +910,14 @@ def fetch_tago_arrivals_by_station_and_route(city_code: str | None, node_id: str
 def fetch_bus_arrival(city_code: str | None = None, node_id: str | None = None, route_id: str | None = None, route_no: str | None = DEFAULT_TAGO_ROUTE_NO) -> dict[str, Any]:
     if city_code and node_id and route_id:
         result = fetch_tago_arrivals_by_station_and_route(city_code, node_id, route_id)
-        return _with_fallback(result, _bus_arrival_fallback(), "fallback sample입니다.", "cityCode/nodeId/routeId 확인")
+        return _with_fallback(result, _bus_arrival_fallback(), "대체 샘플입니다.", "cityCode/nodeId/routeId 확인")
     if city_code and node_id:
         result = fetch_tago_arrivals_by_station(city_code, node_id)
-        return _with_fallback(result, _bus_arrival_fallback(), "fallback sample입니다.", "cityCode/nodeId 확인")
+        return _with_fallback(result, _bus_arrival_fallback(), "대체 샘플입니다.", "cityCode/nodeId 확인")
 
     selected_city_code, city_result = find_tago_city_code("김포", city_code)
     if not selected_city_code:
-        return _with_fallback(city_result, _bus_arrival_fallback(), "fallback sample입니다.", "cityCode 직접 입력")
+        return _with_fallback(city_result, _bus_arrival_fallback(), "대체 샘플입니다.", "cityCode 직접 입력")
 
     selected_route_id = route_id
     if not selected_route_id:
@@ -958,7 +958,7 @@ def fetch_bus_arrival(city_code: str | None = None, node_id: str | None = None, 
         "stations_status": stations["status"],
         "stations_real_count": stations["real_count"],
     }
-    return _with_fallback(arrival, _bus_arrival_fallback(), "fallback sample입니다.", "도착정보 operation 또는 정류소 파라미터 확인")
+    return _with_fallback(arrival, _bus_arrival_fallback(), "대체 샘플입니다.", "도착정보 operation 또는 정류소 파라미터 확인")
 
 
 def fetch_weather_stub() -> dict[str, Any]:

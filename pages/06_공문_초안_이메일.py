@@ -31,11 +31,11 @@ render_disclaimer_box("담당자 확인 후 공식 절차 전환 가능 여부�
 email_info = email_status()
 cols = st.columns(3)
 with cols[0]:
-    render_metric_card("SendGrid 상태", s(str(email_info["data_status"])), "optional", "warning" if not email_info["can_send"] else "success")
+    render_metric_card("SendGrid 상태", s(str(email_info["data_status"])), "기본 비활성 안전장치", "warning" if not email_info["can_send"] else "success")
 with cols[1]:
     render_metric_card("발송 활성화", "enabled" if email_info["enabled"] else "disabled", "ENABLE_SENDGRID_SEND", "info")
 with cols[2]:
-    render_metric_card("발신 이메일", "configured" if email_info["has_sender"] else "missing", "value hidden", "muted")
+    render_metric_card("발신 이메일", "configured" if email_info["has_sender"] else "missing", "값 미표시", "muted")
 
 render_section_header("DRAFT", "공문 초안 생성", "입력 내용을 바탕으로 관리자 검증용 초안을 생성합니다.")
 with st.form("official_draft_form"):

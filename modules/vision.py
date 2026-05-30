@@ -1,4 +1,4 @@
-"""Optional accessibility image analysis with demo fallback."""
+"""Optional accessibility image analysis with safe alternate behavior."""
 
 from __future__ import annotations
 
@@ -44,8 +44,8 @@ def vision_status() -> dict[str, str | bool]:
     if api_key and model:
         return {"configured": True, "data_status": "configured", "message": "Vision 모델 설정이 감지되었습니다."}
     if api_key and not model:
-        return {"configured": False, "data_status": "missing_model", "message": "VISION_MODEL 설정이 없어 demo fallback을 사용합니다."}
-    return {"configured": False, "data_status": "missing_key", "message": "OPENROUTER_API_KEY 설정이 없어 demo fallback을 사용합니다."}
+        return {"configured": False, "data_status": "missing_model", "message": "VISION_MODEL 설정이 없어 시연용 대체 응답을 사용합니다."}
+    return {"configured": False, "data_status": "missing_key", "message": "OPENROUTER_API_KEY 설정이 없어 시연용 대체 응답을 사용합니다."}
 
 
 def test_vision_model_available() -> dict[str, Any]:
@@ -103,7 +103,7 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
     if not image_bytes:
         result = demo_vision_fallback(report_type, description)
         result["reason"] = "missing_input"
-        result["message"] = "이미지 입력이 없어 demo fallback 결과를 표시합니다."
+        result["message"] = "이미지 입력이 없어 시연용 대체 응답을 표시합니다."
         return result
 
     if not api_key:
@@ -180,5 +180,5 @@ def summarize_image_upload(filename: str | None, size: int | None = None) -> dic
         "filename": sanitize_public_claims(filename or ""),
         "size": size,
         "status": "업로드 확인",
-        "note": sanitize_public_claims("AI 비전검증은 optional 기능이며 실패 시 demo fallback을 사용합니다."),
+        "note": sanitize_public_claims("AI 비전검증은 optional 기능이며 실패 시 시연용 대체 응답을 사용합니다."),
     }

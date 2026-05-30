@@ -25,6 +25,15 @@ def s(text: str) -> str:
     return sanitize_public_claims(text)
 
 
+def display_analysis_source(source: object) -> str:
+    value = str(source or "demo_fallback")
+    if value == "vision_model":
+        return "AI 모델 응답"
+    if value in {"demo_fallback", "missing_key"}:
+        return "시연용 대체 응답"
+    return "AI 임시 검토"
+
+
 REPORT_TYPES = ["경사로 불편", "보행 장애물", "안내표지 부족", "장애인 화장실 접근성", "기타"]
 REQUIRED_NOTICE = "AI 검출 결과는 공식 민원 또는 행정처분 자료가 아닙니다. 관리자 검증, 개인정보 마스킹, 담당 공무원 확인 후 공식 접수 절차로 전환될 수 있습니다."
 
@@ -67,7 +76,7 @@ if saved:
     with result_cols[1]:
         render_metric_card("관리자 검토", "필요" if saved.get("review_required") else "권장", "review", "purple")
     with result_cols[2]:
-        render_metric_card("분석 소스", s(str(saved.get("source", "demo_fallback"))), "fallback aware", "muted")
+        render_metric_card("분석 소스", s(display_analysis_source(saved.get("source"))), "AI 임시 검토", "muted")
 
     for item in saved.get("detected_items", []):
         render_info_card("검출 후보", s(str(item)), status="info")

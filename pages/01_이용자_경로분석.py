@@ -152,15 +152,17 @@ def render_route_result(saved: dict) -> None:
     render_section_header("MAP", "참고 지도", f"{inputs['origin'] or '출발지 미입력'} → {inputs['destination'] or '목적지 미입력'}", "지도")
     render_info_card(
         "참고 좌표 기반 시각화",
-        "아래 지도는 실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. VWorld 실패 또는 키 누락 시 mock 좌표를 사용합니다.",
+        "아래 지도는 실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. VWorld 주소 변환 API가 일시적으로 응답하지 않으면 시연용 대체 좌표를 사용합니다.",
         status="info",
     )
     render_reference_map(origin_coord, destination_coord)
-    render_disclaimer_box("실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. 현장 상태와 운영기관 안내를 확인해야 합니다.")
+    render_disclaimer_box("실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. 좌표는 참고용이며 실제 현장 위치 검증과 운영기관 안내 확인이 필요합니다.")
+    if origin_coord.get("data_status") != "real_api" or destination_coord.get("data_status") != "real_api":
+        render_warning_box("VWorld 주소 변환 API가 일시적으로 응답하지 않아 시연용 대체 좌표를 사용했을 수 있습니다. 실제 현장 위치 확인이 필요합니다.")
 
     col_score, col_level, col_source, col_weather = st.columns(4)
     with col_score:
-        render_metric_card("접근성 점수", result["score"], s(result["model_type"]), "success")
+        render_metric_card("접근성 점수", f"{result['score']} / 100", "공공데이터와 입력값 기반 참고 점수", "success")
     with col_level:
         render_metric_card("등급", s(result["mobility_level"]), s(result["ai_name"]), "purple")
     with col_source:
@@ -169,7 +171,7 @@ def render_route_result(saved: dict) -> None:
         render_metric_card(
             "기상 API",
             weather_status,
-            f"real={weather_result.get('real_count', 0)} fallback={weather_result.get('fallback_count', 0)}",
+            f"real={weather_result.get('real_count', 0)} 대체={weather_result.get('fallback_count', 0)}",
             "success" if weather_status == "real_api" else "warning",
         )
     render_status_badge(f"기상 요약: {weather_summary_text(weather_result)}", "success" if weather_status == "real_api" else "warning")

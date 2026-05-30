@@ -44,7 +44,7 @@ def build_mobility_recommendation(wheelchair_user: bool, origin: str, destinatio
     elif api_result.get("status") == "real_api_no_data":
         reason = f"{reason} 공공데이터는 정상 응답했으나 현재 검색 조건 기준 결과가 없습니다."
     else:
-        reason = f"{reason} 공공데이터 실응답 확인 실패, fallback 추천 사용 상태입니다."
+        reason = f"{reason} 공공데이터 실응답 확인 실패, 대체 응답 기반 추천 사용 상태입니다."
 
     return {
         "candidate": s(candidate),
@@ -132,7 +132,7 @@ if saved:
     with result_cols[1]:
         render_metric_card("희망 일정", f"{saved['desired_date']} {saved['desired_time']}", "사용자 입력", "info")
     with result_cols[2]:
-        render_metric_card("공공데이터 API", api_status, f"real={public_api.get('real_count', 0)} fallback={public_api.get('fallback_count', 0)}", "success" if api_status == "real_api" else "warning")
+        render_metric_card("공공데이터 API", api_status, f"real={public_api.get('real_count', 0)} 대체={public_api.get('fallback_count', 0)}", "success" if api_status == "real_api" else "warning")
     with result_cols[3]:
         render_metric_card("문서 상태", saved["rag_data_status"], f"results={saved['rag_result_count']}", "purple")
 
@@ -151,9 +151,9 @@ if saved:
         elif api_status == "real_api_no_data":
             st.write("공공데이터 정상 응답이나 검색 조건 기준 결과가 없습니다.")
         else:
-            st.write("공공데이터 실응답 확인 실패, fallback 추천 사용 상태입니다.")
+            st.write("공공데이터 실응답 확인 실패, 대체 응답 기반 추천 사용 상태입니다.")
 
-    render_status_badge("RAG 근거 있음" if saved["rag_results"] else "RAG fallback", "success" if saved["rag_results"] else "warning")
+    render_status_badge("RAG 근거 있음" if saved["rag_results"] else "RAG 대체 응답", "success" if saved["rag_results"] else "warning")
     with st.expander("교통약자 이동지원 관련 RAG 근거"):
         if saved["rag_results"]:
             for item in saved["rag_results"]:
