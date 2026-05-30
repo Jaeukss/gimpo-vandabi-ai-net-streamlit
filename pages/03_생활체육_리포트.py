@@ -33,7 +33,38 @@ def s(text: object) -> str:
     return sanitize_public_claims(str(text))
 
 
-def build_template_report(inputs: dict, context: str, facility_status: str, detail_status: str) -> str:
+def api_status_line(result: dict) -> str:
+    status = result.get("status", "fallback")
+    if status == "real_api":
+        return f"실응답 {result.get('real_count', 0)}건"
+    if status == "real_api_no_data":
+        return "검색 조건 기준 결과 없음"
+    return "시설 API 실응답 확인 실패, RAG/fallback 사용"
+
+
+def facility_rows(*results: dict) -> list[dict]:
+    rows: list[dict] = []
+    for result in results:
+        if result.get("status") != "real_api":
+            continue
+        for item in result.get("items", [])[:5]:
+            if not isinstance(item, dict):
+                rows.append({"raw": s(item)})
+                continue
+            rows.append(
+                {
+                    "시설명": item.get("faci_nm") or item.get("faciNm") or item.get("facility_name") or "",
+                    "주소": item.get("faci_road_addr") or item.get("faci_addr") or item.get("lNmAddr") or "",
+                    "지역": item.get("addr_cpb_nm") or item.get("fmng_cpb_nm") or item.get("area") or "",
+                    "종목": item.get("fcob_nm") or "",
+                    "유형": item.get("ftype_nm") or "",
+                    "상태": item.get("faci_stat_nm") or item.get("faci_stat_cd") or "",
+                }
+            )
+    return rows
+
+
+def build_template_report(inputs: dict, context: str, facility_result: dict, detail_result: dict) -> str:
     discomfort_text = "있음" if inputs["has_discomfort"] else "없음"
     instructor_text = "필요" if inputs["needs_instructor_check"] else "권장"
     report = f"""
@@ -58,8 +89,8 @@ def build_template_report(inputs: dict, context: str, facility_status: str, deta
 - 피로도, 불편감, 접근성 지원 필요 유형을 지도자에게 공유합니다.
 
 ### 시설 참고 정보
-- 전국체육시설 정보 API 상태: {facility_status}
-- 공공체육시설 상세 정보 API 상태: {detail_status}
+- 전국체육시설 정보 API: {api_status_line(facility_result)}
+- 공공체육시설 상세 정보 API: {api_status_line(detail_result)}
 
 ### 참고 근거
 {context}
@@ -111,7 +142,7 @@ if submitted:
         "support_type": support_type,
         "needs_instructor_check": needs_instructor_check,
     }
-    template_report = build_template_report(inputs, context, facility_result["status"], detail_result["status"])
+    template_report = build_template_report(inputs, context, facility_result, detail_result)
     llm_result = generate_rag_answer(
         "생활체육 리포트 문장을 문서 근거 안에서 안전하게 정리해 주세요.",
         f"작성 초안:\n{template_report}\n\n참고 근거:\n{context}",
@@ -140,23 +171,25 @@ if saved:
     with cols[1]:
         render_metric_card("문서 상태", saved["rag_status"], f"results={saved['rag_count']}", "info")
     with cols[2]:
-        render_metric_card("시설 API", facility_result["status"], f"count={facility_result['count']}", "success" if facility_result["status"] == "real_api" else "warning")
+        render_metric_card("시설 API", facility_result["status"], f"real={facility_result.get('real_count', 0)} fallback={facility_result.get('fallback_count', 0)}", "success" if facility_result["status"] == "real_api" else "warning")
     with cols[3]:
-        render_metric_card("상세 API", detail_result["status"], f"count={detail_result['count']}", "success" if detail_result["status"] == "real_api" else "warning")
+        render_metric_card("상세 API", detail_result["status"], f"real={detail_result.get('real_count', 0)} fallback={detail_result.get('fallback_count', 0)}", "success" if detail_result["status"] == "real_api" else "warning")
     render_metric_card("문장 개선", saved["source"], "OpenRouter optional", "muted")
     render_info_card("리포트", saved["report"], status="info")
     render_disclaimer_box(REQUIRED_NOTICE)
 
     with st.expander("생활체육 시설 공공데이터 참고"):
-        rows = []
-        rows.extend(facility_result.get("items", [])[:5])
-        rows.extend(detail_result.get("items", [])[:5])
         render_status_badge(f"전국체육시설 정보: {facility_result['status']}", "success" if facility_result["status"] == "real_api" else "warning")
         render_status_badge(f"공공체육시설 상세 정보: {detail_result['status']}", "success" if detail_result["status"] == "real_api" else "warning")
+        st.caption(s(f"시설 API reason={facility_result.get('reason_code', '')} action={facility_result.get('action_needed', '')}"))
+        st.caption(s(f"상세 API reason={detail_result.get('reason_code', '')} action={detail_result.get('action_needed', '')}"))
+        rows = facility_rows(facility_result, detail_result)
         if rows:
             st.dataframe(pd.DataFrame(rows), width="stretch")
+        elif facility_result["status"] == "real_api_no_data" or detail_result["status"] == "real_api_no_data":
+            st.write("검색 조건 기준 결과 없음 상태입니다.")
         else:
-            st.write("표시 가능한 시설 참고 항목이 없습니다.")
+            st.write("시설 API 실응답 확인 실패, RAG/fallback 사용 상태입니다.")
 
     with st.expander("RAG 참고 근거"):
         if saved["results"]:

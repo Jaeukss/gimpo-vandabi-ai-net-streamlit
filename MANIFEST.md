@@ -44,7 +44,7 @@ Streamlit 기본 멀티페이지 화면 6개만 둡니다.
 
 ## 공공데이터 API 7종
 
-`modules/api_clients.py`에서 `DATA_GO_KR_SERVICE_KEY` 하나만 사용합니다.
+`modules/api_clients.py`에서 `DATA_GO_KR_SERVICE_KEY` 하나만 사용하며, endpoint별 operation path 기준으로 호출합니다.
 
 - 전국체육시설 정보
 - 공공체육시설 상세 정보
@@ -54,7 +54,7 @@ Streamlit 기본 멀티페이지 화면 6개만 둡니다.
 - TAGO 버스도착정보
 - TAGO 버스노선정보
 
-모든 함수는 `real_api`, `missing_key`, `missing_params`, `api_error`, `timeout`, `network_error`, `parse_error`, `fallback` 계열 상태를 반환하며, 실패 시 앱 실행을 중단하지 않습니다.
+모든 함수는 `real_api`, `real_api_no_data`, `missing_key`, `missing_params`, `api_error`, `timeout`, `network_error`, `parse_error`, `fallback` 계열 상태를 반환하며, 실패 시 앱 실행을 중단하지 않습니다. `fallback`은 실API 성공이 아니라 앱 안정성 확보용 대체 응답입니다.
 
 ## `docs/`
 

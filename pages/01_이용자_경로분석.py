@@ -105,12 +105,20 @@ def load_weather_if_enabled(enabled: bool) -> dict:
             "status": "disabled",
             "data_status": "disabled",
             "source": "disabled",
-            "count": 0,
-            "summary": "날씨 영향 반영을 선택하지 않았습니다.",
+            "real_count": 0,
+            "fallback_count": 0,
+            "summary": {"weather_summary": "날씨 영향 반영을 선택하지 않았습니다."},
             "message": "날씨 영향 반영을 선택하지 않았습니다.",
             "items": [],
         }
     return fetch_weather_short_forecast()
+
+
+def weather_summary_text(weather_result: dict) -> str:
+    summary = weather_result.get("summary", {})
+    if isinstance(summary, dict):
+        return s(summary.get("weather_summary", weather_result.get("message", "fallback")))
+    return s(summary or weather_result.get("message", "fallback"))
 
 
 def store_route_result(inputs: dict) -> None:
@@ -141,12 +149,7 @@ def render_route_result(saved: dict) -> None:
     weather_result = saved.get("weather_result", {})
     weather_status = str(weather_result.get("status", weather_result.get("data_status", "fallback")))
 
-    render_section_header(
-        "MAP",
-        "참고 지도",
-        f"{inputs['origin'] or '출발지 미입력'} → {inputs['destination'] or '목적지 미입력'}",
-        "지도",
-    )
+    render_section_header("MAP", "참고 지도", f"{inputs['origin'] or '출발지 미입력'} → {inputs['destination'] or '목적지 미입력'}", "지도")
     render_info_card(
         "참고 좌표 기반 시각화",
         "아래 지도는 실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. VWorld 실패 또는 키 누락 시 mock 좌표를 사용합니다.",
@@ -163,8 +166,13 @@ def render_route_result(saved: dict) -> None:
     with col_source:
         render_metric_card("좌표 상태", f"{origin_coord['data_status']} / {destination_coord['data_status']}", "origin / destination", "warning")
     with col_weather:
-        render_metric_card("기상 API", weather_status, s(weather_result.get("source", "public_data")), "info" if weather_status == "real_api" else "warning")
-    render_status_badge(s(f"기상 요약: {weather_result.get('summary', weather_result.get('message', 'fallback'))}"), "info" if weather_status == "real_api" else "warning")
+        render_metric_card(
+            "기상 API",
+            weather_status,
+            f"real={weather_result.get('real_count', 0)} fallback={weather_result.get('fallback_count', 0)}",
+            "success" if weather_status == "real_api" else "warning",
+        )
+    render_status_badge(f"기상 요약: {weather_summary_text(weather_result)}", "success" if weather_status == "real_api" else "warning")
 
     render_section_header("SCORE", "주요 사유", "점수 항목과 확인 필요 사항입니다.")
     st.dataframe(pd.DataFrame([{"항목": key, "점수": value} for key, value in result["item_scores"].items()]), width="stretch")

@@ -8,6 +8,7 @@ import streamlit as st
 
 import modules.rag_bm25 as rag_bm25
 from modules.api_clients import (
+    DEFAULT_TAGO_ROUTE_NO,
     data_go_kr_status,
     fetch_bus_arrival,
     fetch_bus_route,
@@ -62,7 +63,7 @@ def folder_status(path: str, pattern: str = "*") -> dict[str, str | int]:
 def status_style(status: str) -> str:
     if status in {"configured", "enabled_ready", "loaded", "real_api", "real_csv"}:
         return "success"
-    if status in {"disabled", "fallback", "mock_fallback", "prototype_dummy", "missing_model", "missing_params", "missing_key"}:
+    if status in {"real_api_no_data", "disabled", "fallback", "mock_fallback", "prototype_dummy", "missing_model", "missing_params", "missing_key"}:
         return "warning"
     if status in {"missing", "missing_config", "empty", "api_error", "timeout", "network_error", "parse_error"}:
         return "danger"
@@ -74,23 +75,29 @@ def public_api_result_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]
         {
             "service_name": result.get("service_name", ""),
             "status": result.get("status", ""),
-            "count": result.get("count", 0),
+            "real_count": result.get("real_count", 0),
+            "fallback_count": result.get("fallback_count", 0),
             "source": result.get("source", ""),
-            "note": result.get("message", ""),
+            "reason_code": result.get("reason_code", ""),
+            "action_needed": result.get("action_needed", ""),
         }
         for result in results
     ]
 
 
-def run_public_data_api_checks() -> list[dict[str, Any]]:
+def run_public_data_api_checks(city_code: str, node_id: str, route_id: str, route_no: str) -> list[dict[str, Any]]:
+    city = city_code.strip() or None
+    node = node_id.strip() or None
+    route = route_id.strip() or None
+    route_number = route_no.strip() or DEFAULT_TAGO_ROUTE_NO
     return [
         fetch_sports_facilities(keyword="김포"),
         fetch_sports_facility_detail(facility_name="김포반다비체육센터"),
         fetch_disabled_convenience_facilities(keyword="김포"),
         fetch_mobility_support_realtime(area="김포"),
         fetch_weather_short_forecast(),
-        fetch_bus_arrival(),
-        fetch_bus_route(),
+        fetch_bus_arrival(city_code=city, node_id=node, route_id=route, route_no=route_number),
+        fetch_bus_route(city_code=city, route_id=route, route_no=route_number),
     ]
 
 
@@ -107,7 +114,7 @@ def render_chart(frame: pd.DataFrame) -> None:
 
 render_app_header(
     "B2G 운영 참고 대시보드",
-    "Secrets 설정 상태, RAG 문서, CSV, 공공데이터 7종 API 상태를 파일럿 기준으로 점검합니다.",
+    "Secrets, RAG, CSV, 공공데이터 API 7종 상태를 파일럿 기준으로 점검합니다.",
     "B2G",
 )
 render_disclaimer_box(get_disclaimer("general"))
@@ -147,17 +154,6 @@ for col, (label, value, helper, status) in zip(cols, kpi_cards):
     with col:
         render_metric_card(label, value, helper, status)
 
-ops_cards = [
-    ("이동지원 후보 요청", 7, "prototype_dummy", "info"),
-    ("AI 제보 검토 대기", 3, "prototype_dummy", "warning"),
-    ("생활체육 리포트", 5, "prototype_dummy", "purple"),
-    ("공공데이터 7종", "버튼 점검", "자동 호출 없음", "muted"),
-]
-cols = st.columns(4)
-for col, (label, value, helper, status) in zip(cols, ops_cards):
-    with col:
-        render_metric_card(label, value, helper, status)
-
 render_status_badge("파일럿 상태 점검", "info")
 render_status_badge("prototype_dummy 포함", "warning")
 render_status_badge("키 값 미표시", "success")
@@ -170,7 +166,6 @@ vworld_key_status = "configured" if vworld["data_status"] == "configured" else "
 sendgrid_status = str(email["data_status"])
 rag_docs_status = "loaded" if len(rag_index.chunks) > 0 else "empty"
 csv_status = "loaded" if not inventory.empty else "empty"
-
 qa_rows = [
     {"item": "OpenRouter Text Model", "status": text_model_status, "note": "버튼 실행 시에만 연결 테스트"},
     {"item": "OpenRouter Vision Model", "status": vision_model_status, "note": "이미지 분석은 업로드 후에만 실행"},
@@ -201,25 +196,45 @@ with qa_cols[2]:
         render_status_badge(s(result["status"]), status_style(str(result["status"])))
         st.caption(s(f"reason={result['reason']} has_coordinate={result['has_coordinate']}"))
 
-render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 아래 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")
+render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")
+tago_cols = st.columns(4)
+with tago_cols[0]:
+    tago_route_no = st.text_input("TAGO routeNo", value=DEFAULT_TAGO_ROUTE_NO, help="기본 시연값입니다. 직접 수정할 수 있습니다.")
+with tago_cols[1]:
+    tago_city_code = st.text_input("TAGO cityCode", value="", help="비워두면 김포 cityCode 자동탐색을 시도합니다.")
+with tago_cols[2]:
+    tago_route_id = st.text_input("TAGO routeId", value="", help="직접 입력값이 있으면 우선 사용합니다.")
+with tago_cols[3]:
+    tago_node_id = st.text_input("TAGO nodeId", value="", help="직접 입력값이 있으면 도착정보에 우선 사용합니다.")
+
 if st.button("공공데이터 7종 상태 점검", use_container_width=True):
-    st.session_state["public_data_api_results"] = run_public_data_api_checks()
+    st.session_state["public_data_api_results"] = run_public_data_api_checks(tago_city_code, tago_node_id, tago_route_id, tago_route_no)
+    st.session_state["public_data_api_tago_inputs"] = {
+        "route_no": tago_route_no or DEFAULT_TAGO_ROUTE_NO,
+        "city_code": tago_city_code,
+        "route_id": tago_route_id,
+        "node_id": tago_node_id,
+    }
 
 public_api_results = st.session_state.get("public_data_api_results")
 if public_api_results:
     rows = public_api_result_rows(public_api_results)
     st.dataframe(pd.DataFrame(rows), width="stretch")
-    api_cols = st.columns(4)
-    real_count = sum(1 for item in public_api_results if item.get("status") == "real_api")
-    fallback_count = len(public_api_results) - real_count
+    api_cols = st.columns(5)
+    real_success_count = sum(1 for item in public_api_results if item.get("status") == "real_api")
+    real_no_data_count = sum(1 for item in public_api_results if item.get("status") == "real_api_no_data")
+    fallback_count = len(public_api_results) - real_success_count - real_no_data_count
+    tago_inputs = st.session_state.get("public_data_api_tago_inputs", {})
     with api_cols[0]:
-        render_metric_card("real_api", real_count, "성공 API 수", "success" if real_count else "muted")
+        render_metric_card("real_api 성공", real_success_count, "실제 항목 있음", "success" if real_success_count else "muted")
     with api_cols[1]:
-        render_metric_card("fallback/기타", fallback_count, "성공 외 상태", "warning" if fallback_count else "success")
+        render_metric_card("real_api_no_data", real_no_data_count, "정상 응답 결과 없음", "warning" if real_no_data_count else "muted")
     with api_cols[2]:
-        render_metric_card("DATA GO KR", data_go["data_status"], "키 값 미표시", "info" if data_go["data_status"] == "configured" else "warning")
+        render_metric_card("fallback/오류", fallback_count, "성공 외 상태", "danger" if fallback_count else "success")
     with api_cols[3]:
-        render_metric_card("호출 방식", "button", "사용자 실행 기반", "purple")
+        render_metric_card("DATA GO KR", data_go["data_status"], "키 값 미표시", "info" if data_go["data_status"] == "configured" else "warning")
+    with api_cols[4]:
+        render_metric_card("TAGO routeNo", tago_inputs.get("route_no", DEFAULT_TAGO_ROUTE_NO), "기본값 81", "purple")
 else:
     render_warning_box("공공데이터 7종 API는 아직 호출하지 않았습니다. 버튼을 누르면 결과가 session_state에 저장됩니다.")
 

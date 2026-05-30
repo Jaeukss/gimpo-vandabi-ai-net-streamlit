@@ -70,7 +70,7 @@ ENABLE_SENDGRID_SEND = "false"
 
 ## 공공데이터 API 7종
 
-9단계부터 `DATA_GO_KR_SERVICE_KEY` 하나로 아래 API를 endpoint별로 분리 호출합니다.
+9단계부터 `DATA_GO_KR_SERVICE_KEY` 하나로 아래 API를 endpoint별 operation path 기준으로 분리 호출합니다.
 
 - 전국체육시설 정보
 - 공공체육시설 상세 정보
@@ -80,7 +80,7 @@ ENABLE_SENDGRID_SEND = "false"
 - TAGO 버스도착정보
 - TAGO 버스노선정보
 
-일부 API는 필수 파라미터, 운영 상태, 응답 스키마에 따라 `missing_params`, `api_error`, `timeout`, `network_error`, `parse_error`, `fallback` 상태가 표시될 수 있습니다. 실패해도 앱 실행은 유지됩니다.
+일부 API는 검색 조건 또는 운영기관 응답 상태에 따라 `real_api_no_data`, `missing_params`, `api_error`, `timeout`, `network_error`, `parse_error`, `fallback` 상태가 표시될 수 있습니다. `fallback`은 실API 성공이 아니라 앱 안정성 확보용 대체 응답입니다.
 
 ## Demo Flow
 

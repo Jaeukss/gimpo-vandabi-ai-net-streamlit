@@ -39,17 +39,40 @@ def build_mobility_recommendation(wheelchair_user: bool, origin: str, destinatio
         reason = "보행 가능 조건과 대중교통 접근성을 함께 확인할 수 있습니다."
         status = "info"
 
-    if api_result.get("status") == "real_api" and api_result.get("items"):
-        reason = f"{reason} 공공데이터 API 참고 항목 {api_result.get('count', 0)}건이 확인되었습니다."
+    if api_result.get("status") == "real_api":
+        reason = f"{reason} 공공데이터 실응답 {api_result.get('real_count', 0)}건을 참고할 수 있습니다."
+    elif api_result.get("status") == "real_api_no_data":
+        reason = f"{reason} 공공데이터는 정상 응답했으나 현재 검색 조건 기준 결과가 없습니다."
+    else:
+        reason = f"{reason} 공공데이터 실응답 확인 실패, fallback 추천 사용 상태입니다."
 
     return {
         "candidate": s(candidate),
         "route": s(f"{origin or '출발지 미입력'} → {destination or '목적지 미입력'}"),
         "reason": s(reason),
-        "next_step": s("운영기관 검토 필요"),
+        "next_step": s("운영기관 확인 필요"),
         "availability": s("이용 가능 여부 확인 필요"),
         "status": status,
     }
+
+
+def mobility_item_summary(items: list[dict]) -> pd.DataFrame:
+    rows = []
+    for item in items[:5]:
+        if not isinstance(item, dict):
+            rows.append({"raw": s(item)})
+            continue
+        rows.append(
+            {
+                "센터": item.get("ctrNm") or item.get("centerName") or item.get("센터명") or "",
+                "운영차량대수": item.get("oprVhclCntom") or item.get("vhclCntom") or "",
+                "가용차량대수": item.get("avlVhclCntom") or "",
+                "예약건수": item.get("rsvtNocs") or "",
+                "대기건수": item.get("wtngNocs") or "",
+                "기준": item.get("totDt") or item.get("baseDt") or "",
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 render_app_header(
@@ -101,6 +124,7 @@ saved = st.session_state.get("mobility_recommendation")
 if saved:
     recommendation = saved["recommendation"]
     public_api = saved["public_api"]
+    api_status = public_api.get("status", "fallback")
     render_section_header("RESULT", "후보 추천 결과", "실제 이용 가능 여부는 운영기관 확인이 필요합니다.")
     result_cols = st.columns(4)
     with result_cols[0]:
@@ -108,7 +132,7 @@ if saved:
     with result_cols[1]:
         render_metric_card("희망 일정", f"{saved['desired_date']} {saved['desired_time']}", "사용자 입력", "info")
     with result_cols[2]:
-        render_metric_card("공공데이터 API", public_api["status"], f"count={public_api['count']}", "success" if public_api["status"] == "real_api" else "warning")
+        render_metric_card("공공데이터 API", api_status, f"real={public_api.get('real_count', 0)} fallback={public_api.get('fallback_count', 0)}", "success" if api_status == "real_api" else "warning")
     with result_cols[3]:
         render_metric_card("문서 상태", saved["rag_data_status"], f"results={saved['rag_result_count']}", "purple")
 
@@ -118,13 +142,16 @@ if saved:
     if saved["support_note"]:
         render_warning_box(f"추가 확인사항: {saved['support_note']}")
 
-    render_status_badge(f"공공데이터 API: {public_api['status']}", "success" if public_api["status"] == "real_api" else "warning")
+    render_status_badge(f"공공데이터 API: {api_status}", "success" if api_status == "real_api" else "warning")
     with st.expander("교통약자 이동지원 공공데이터 참고"):
         st.write(s(public_api.get("message", "")))
-        if public_api.get("items"):
-            st.dataframe(pd.DataFrame(public_api["items"][:5]), width="stretch")
+        st.caption(s(f"reason_code={public_api.get('reason_code', '')} action_needed={public_api.get('action_needed', '')}"))
+        if api_status == "real_api" and public_api.get("items"):
+            st.dataframe(mobility_item_summary(public_api["items"]), width="stretch")
+        elif api_status == "real_api_no_data":
+            st.write("공공데이터 정상 응답이나 검색 조건 기준 결과가 없습니다.")
         else:
-            st.write("표시 가능한 공공데이터 항목이 없습니다.")
+            st.write("공공데이터 실응답 확인 실패, fallback 추천 사용 상태입니다.")
 
     render_status_badge("RAG 근거 있음" if saved["rag_results"] else "RAG fallback", "success" if saved["rag_results"] else "warning")
     with st.expander("교통약자 이동지원 관련 RAG 근거"):
@@ -137,11 +164,7 @@ if saved:
 
     if st.button(s("운영기관 검토 요청")):
         render_status_badge("UI 상태 등록", "info")
-        render_info_card(
-            "검토 요청 상태",
-            "요청 후보가 화면 상태로만 등록되었습니다. 실제 접수 처리 또는 이용 가능 여부 결정이 아닙니다.",
-            status="info",
-        )
+        render_info_card("검토 요청 상태", "요청 후보가 화면 상태로만 등록되었습니다. 실제 접수 처리 또는 이용 가능 여부 결정이 아닙니다.", status="info")
 else:
     render_warning_box("입력값을 작성한 뒤 이동지원 후보 추천을 실행하세요.")
 
