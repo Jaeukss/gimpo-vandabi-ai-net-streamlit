@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import time
 
+import pandas as pd
 import streamlit as st
 
 import modules.rag_bm25 as rag_bm25
+from modules.api_clients import fetch_mobility_support_realtime
 from modules.safety import get_disclaimer, sanitize_public_claims
 from modules.ui_components import (
     inject_global_styles,
@@ -19,15 +21,15 @@ from modules.ui_components import (
 )
 
 
-st.set_page_config(page_title="이동지원 추천", page_icon="♿", layout="wide")
+st.set_page_config(page_title="이동지원 추천", page_icon="🚐", layout="wide")
 inject_global_styles()
 
 
-def s(text: str) -> str:
-    return sanitize_public_claims(text)
+def s(text: object) -> str:
+    return sanitize_public_claims(str(text))
 
 
-def build_mobility_recommendation(wheelchair_user: bool, origin: str, destination: str) -> dict[str, str]:
+def build_mobility_recommendation(wheelchair_user: bool, origin: str, destination: str, api_result: dict) -> dict[str, str]:
     if wheelchair_user:
         candidate = "특별교통수단 우선 검토"
         reason = "휠체어 이용 조건이 있어 승하차 지원 가능 여부 확인이 필요합니다."
@@ -37,16 +39,24 @@ def build_mobility_recommendation(wheelchair_user: bool, origin: str, destinatio
         reason = "보행 가능 조건과 대중교통 접근성을 함께 확인할 수 있습니다."
         status = "info"
 
+    if api_result.get("status") == "real_api" and api_result.get("items"):
+        reason = f"{reason} 공공데이터 API 참고 항목 {api_result.get('count', 0)}건이 확인되었습니다."
+
     return {
         "candidate": s(candidate),
         "route": s(f"{origin or '출발지 미입력'} → {destination or '목적지 미입력'}"),
         "reason": s(reason),
         "next_step": s("운영기관 검토 필요"),
+        "availability": s("이용 가능 여부 확인 필요"),
         "status": status,
     }
 
 
-render_app_header("교통약자 이동지원 후보 추천", "이동지원 후보와 운영기관 확인 자료를 안전한 표현으로 정리합니다.", "B2C")
+render_app_header(
+    "교통약자 이동지원 후보 추천",
+    "공공데이터 API, RAG 문서, 사용자 입력을 참고해 운영기관 검토용 후보 정보를 정리합니다.",
+    "B2C",
+)
 render_disclaimer_box(get_disclaimer("mobility"))
 
 guide_cols = st.columns(2)
@@ -59,7 +69,7 @@ with st.form("mobility_form"):
     col1, col2 = st.columns(2)
     with col1:
         wheelchair_user = st.checkbox(s("휠체어 이용 여부"), value=False)
-        origin = st.text_input(s("출발지"), placeholder=s("예: 장기역 인근"))
+        origin = st.text_input(s("출발지"), placeholder=s("예: 운양역 인근"))
         desired_date = st.date_input(s("희망일"))
     with col2:
         destination = st.text_input(s("목적지"), value=s("김포반다비체육센터"))
@@ -68,18 +78,19 @@ with st.form("mobility_form"):
 
     submitted = st.form_submit_button(s("이동지원 후보 추천"))
 
-query = "교통약자 이동지원 차량 신청 예약 콜센터 특별교통수단"
 rag_index = rag_bm25.build_index("docs")
-rag_results = rag_bm25.search(query, top_k=4, index=rag_index)
+rag_results = rag_bm25.search("교통약자 이동지원 콜센터 특별교통수단 운영기관 검토", top_k=4, index=rag_index)
 rag_context = rag_bm25.format_context(rag_results)
 
 if submitted:
-    recommendation = build_mobility_recommendation(wheelchair_user, origin, destination)
+    mobility_api = fetch_mobility_support_realtime(area="김포")
+    recommendation = build_mobility_recommendation(wheelchair_user, origin, destination, mobility_api)
     st.session_state["mobility_recommendation"] = {
         "recommendation": recommendation,
         "desired_date": str(desired_date),
         "desired_time": str(desired_time),
         "support_note": s(support_note),
+        "public_api": mobility_api,
         "rag_data_status": rag_index.data_status,
         "rag_result_count": len(rag_results),
         "rag_context": rag_context,
@@ -89,20 +100,31 @@ if submitted:
 saved = st.session_state.get("mobility_recommendation")
 if saved:
     recommendation = saved["recommendation"]
+    public_api = saved["public_api"]
     render_section_header("RESULT", "후보 추천 결과", "실제 이용 가능 여부는 운영기관 확인이 필요합니다.")
-    result_cols = st.columns(3)
+    result_cols = st.columns(4)
     with result_cols[0]:
         render_metric_card("추천 후보", recommendation["candidate"], "candidate", recommendation["status"])
     with result_cols[1]:
         render_metric_card("희망 일정", f"{saved['desired_date']} {saved['desired_time']}", "사용자 입력", "info")
     with result_cols[2]:
+        render_metric_card("공공데이터 API", public_api["status"], f"count={public_api['count']}", "success" if public_api["status"] == "real_api" else "warning")
+    with result_cols[3]:
         render_metric_card("문서 상태", saved["rag_data_status"], f"results={saved['rag_result_count']}", "purple")
 
     render_info_card("이동 구간", recommendation["route"], status="info")
     render_info_card("추천 사유", recommendation["reason"], status="success")
-    render_info_card("다음 확인", recommendation["next_step"], status="warning")
+    render_info_card("다음 확인", f"{recommendation['next_step']} · {recommendation['availability']}", status="warning")
     if saved["support_note"]:
         render_warning_box(f"추가 확인사항: {saved['support_note']}")
+
+    render_status_badge(f"공공데이터 API: {public_api['status']}", "success" if public_api["status"] == "real_api" else "warning")
+    with st.expander("교통약자 이동지원 공공데이터 참고"):
+        st.write(s(public_api.get("message", "")))
+        if public_api.get("items"):
+            st.dataframe(pd.DataFrame(public_api["items"][:5]), width="stretch")
+        else:
+            st.write("표시 가능한 공공데이터 항목이 없습니다.")
 
     render_status_badge("RAG 근거 있음" if saved["rag_results"] else "RAG fallback", "success" if saved["rag_results"] else "warning")
     with st.expander("교통약자 이동지원 관련 RAG 근거"):
@@ -115,7 +137,11 @@ if saved:
 
     if st.button(s("운영기관 검토 요청")):
         render_status_badge("UI 상태 등록", "info")
-        render_info_card("검토 요청 상태", "요청 후보가 화면 상태로만 등록되었습니다. 실제 접수 처리 또는 이용 가능 여부 결정이 아닙니다.", status="info")
+        render_info_card(
+            "검토 요청 상태",
+            "요청 후보가 화면 상태로만 등록되었습니다. 실제 접수 처리 또는 이용 가능 여부 결정이 아닙니다.",
+            status="info",
+        )
 else:
     render_warning_box("입력값을 작성한 뒤 이동지원 후보 추천을 실행하세요.")
 

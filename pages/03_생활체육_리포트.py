@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 import modules.rag_bm25 as rag_bm25
+from modules.api_clients import fetch_sports_facilities, fetch_sports_facility_detail
 from modules.llm_client import generate_rag_answer
 from modules.safety import get_disclaimer, sanitize_public_claims
 from modules.ui_components import (
@@ -13,11 +15,12 @@ from modules.ui_components import (
     render_metric_card,
     render_page_footer_note,
     render_section_header,
+    render_status_badge,
     render_warning_box,
 )
 
 
-st.set_page_config(page_title="생활체육 리포트", page_icon="♿", layout="wide")
+st.set_page_config(page_title="생활체육 리포트", page_icon="🏊", layout="wide")
 inject_global_styles()
 
 
@@ -26,11 +29,11 @@ SUPPORT_TYPES = ["휠체어 또는 보행 보조 필요", "음성 안내 또는 
 REQUIRED_NOTICE = "본 리포트는 의료 진단, 치료, 재활치료 또는 의학적 판단을 대체하지 않습니다. 생활체육 참여를 돕기 위한 참고 정보이며, 운동 강도 변경은 지도자 확인 후 진행해야 합니다."
 
 
-def s(text: str) -> str:
-    return sanitize_public_claims(text)
+def s(text: object) -> str:
+    return sanitize_public_claims(str(text))
 
 
-def build_template_report(inputs: dict, context: str) -> str:
+def build_template_report(inputs: dict, context: str, facility_status: str, detail_status: str) -> str:
     discomfort_text = "있음" if inputs["has_discomfort"] else "없음"
     instructor_text = "필요" if inputs["needs_instructor_check"] else "권장"
     report = f"""
@@ -54,13 +57,24 @@ def build_template_report(inputs: dict, context: str) -> str:
 - 지도자 확인 필요 여부: {instructor_text}
 - 피로도, 불편감, 접근성 지원 필요 유형을 지도자에게 공유합니다.
 
+### 시설 참고 정보
+- 전국체육시설 정보 API 상태: {facility_status}
+- 공공체육시설 상세 정보 API 상태: {detail_status}
+
 ### 참고 근거
 {context}
+
+### 주의 문구
+{REQUIRED_NOTICE}
 """
     return s(report.strip())
 
 
-render_app_header("김포반다비센터 생활체육 리포트", "입력 영역과 결과 영역을 분리해 지도자 확인용 참고 리포트를 생성합니다.", "B2C")
+render_app_header(
+    "김포반다비센터 생활체육 추천 리포트",
+    "입력 영역과 결과 영역을 분리해 지도자 확인용 참고 리포트를 생성합니다.",
+    "B2C",
+)
 render_disclaimer_box(get_disclaimer("sports"))
 render_disclaimer_box(REQUIRED_NOTICE)
 
@@ -81,6 +95,8 @@ with st.form("sports_report_form"):
     submitted = st.form_submit_button(s("생활체육 리포트 생성"))
 
 if submitted:
+    facility_result = fetch_sports_facilities(keyword="김포")
+    detail_result = fetch_sports_facility_detail(facility_name="김포반다비체육센터")
     rag_query = f"반다비 프로그램 생활체육 리포트 {program} 참여 피로도 달성도 지도자 확인"
     rag_index = rag_bm25.build_index("docs")
     rag_results = rag_bm25.search(rag_query, top_k=4, index=rag_index)
@@ -95,8 +111,11 @@ if submitted:
         "support_type": support_type,
         "needs_instructor_check": needs_instructor_check,
     }
-    template_report = build_template_report(inputs, context)
-    llm_result = generate_rag_answer("생활체육 리포트 문장을 문서 근거 안에서 안전하게 정리해 주세요.", f"작성 초안:\n{template_report}\n\n참고 근거:\n{context}")
+    template_report = build_template_report(inputs, context, facility_result["status"], detail_result["status"])
+    llm_result = generate_rag_answer(
+        "생활체육 리포트 문장을 문서 근거 안에서 안전하게 정리해 주세요.",
+        f"작성 초안:\n{template_report}\n\n참고 근거:\n{context}",
+    )
     final_report = s(str(llm_result.get("text", ""))) if llm_result.get("ok") else template_report
     st.session_state["sports_report"] = {
         "report": final_report,
@@ -106,20 +125,39 @@ if submitted:
         "source": s(str(llm_result.get("source", "template"))),
         "context": context,
         "results": rag_results,
+        "facility_result": facility_result,
+        "detail_result": detail_result,
     }
 
 saved = st.session_state.get("sports_report")
 if saved:
-    render_section_header("REPORT", "생활체육 추천 결과", "카드형 리포트와 RAG 근거를 함께 확인합니다.")
-    cols = st.columns(3)
+    facility_result = saved["facility_result"]
+    detail_result = saved["detail_result"]
+    render_section_header("REPORT", "생활체육 추천 결과", "리포트와 RAG 근거, 공공데이터 시설 참고 정보를 함께 확인합니다.")
+    cols = st.columns(4)
     with cols[0]:
         render_metric_card("프로그램", saved["program"], "생활체육", "purple")
     with cols[1]:
         render_metric_card("문서 상태", saved["rag_status"], f"results={saved['rag_count']}", "info")
     with cols[2]:
-        render_metric_card("문장 개선", saved["source"], "OpenRouter optional", "muted")
+        render_metric_card("시설 API", facility_result["status"], f"count={facility_result['count']}", "success" if facility_result["status"] == "real_api" else "warning")
+    with cols[3]:
+        render_metric_card("상세 API", detail_result["status"], f"count={detail_result['count']}", "success" if detail_result["status"] == "real_api" else "warning")
+    render_metric_card("문장 개선", saved["source"], "OpenRouter optional", "muted")
     render_info_card("리포트", saved["report"], status="info")
     render_disclaimer_box(REQUIRED_NOTICE)
+
+    with st.expander("생활체육 시설 공공데이터 참고"):
+        rows = []
+        rows.extend(facility_result.get("items", [])[:5])
+        rows.extend(detail_result.get("items", [])[:5])
+        render_status_badge(f"전국체육시설 정보: {facility_result['status']}", "success" if facility_result["status"] == "real_api" else "warning")
+        render_status_badge(f"공공체육시설 상세 정보: {detail_result['status']}", "success" if detail_result["status"] == "real_api" else "warning")
+        if rows:
+            st.dataframe(pd.DataFrame(rows), width="stretch")
+        else:
+            st.write("표시 가능한 시설 참고 항목이 없습니다.")
+
     with st.expander("RAG 참고 근거"):
         if saved["results"]:
             for item in saved["results"]:

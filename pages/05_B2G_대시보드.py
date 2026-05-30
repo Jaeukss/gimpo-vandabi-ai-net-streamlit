@@ -9,8 +9,14 @@ import streamlit as st
 import modules.rag_bm25 as rag_bm25
 from modules.api_clients import (
     data_go_kr_status,
-    fetch_bus_stub,
+    fetch_bus_arrival,
+    fetch_bus_route,
+    fetch_disabled_convenience_facilities,
+    fetch_mobility_support_realtime,
     fetch_public_facility_stub,
+    fetch_sports_facilities,
+    fetch_sports_facility_detail,
+    fetch_weather_short_forecast,
     fetch_weather_stub,
     test_vworld_geocode_connection,
     vworld_status,
@@ -56,11 +62,36 @@ def folder_status(path: str, pattern: str = "*") -> dict[str, str | int]:
 def status_style(status: str) -> str:
     if status in {"configured", "enabled_ready", "loaded", "real_api", "real_csv"}:
         return "success"
-    if status in {"disabled", "fallback", "mock_fallback", "prototype_dummy", "missing_model"}:
+    if status in {"disabled", "fallback", "mock_fallback", "prototype_dummy", "missing_model", "missing_params", "missing_key"}:
         return "warning"
-    if status in {"missing", "missing_key", "missing_config", "empty"}:
+    if status in {"missing", "missing_config", "empty", "api_error", "timeout", "network_error", "parse_error"}:
         return "danger"
     return "muted"
+
+
+def public_api_result_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "service_name": result.get("service_name", ""),
+            "status": result.get("status", ""),
+            "count": result.get("count", 0),
+            "source": result.get("source", ""),
+            "note": result.get("message", ""),
+        }
+        for result in results
+    ]
+
+
+def run_public_data_api_checks() -> list[dict[str, Any]]:
+    return [
+        fetch_sports_facilities(keyword="김포"),
+        fetch_sports_facility_detail(facility_name="김포반다비체육센터"),
+        fetch_disabled_convenience_facilities(keyword="김포"),
+        fetch_mobility_support_realtime(area="김포"),
+        fetch_weather_short_forecast(),
+        fetch_bus_arrival(),
+        fetch_bus_route(),
+    ]
 
 
 def render_chart(frame: pd.DataFrame) -> None:
@@ -76,7 +107,7 @@ def render_chart(frame: pd.DataFrame) -> None:
 
 render_app_header(
     "B2G 운영 참고 대시보드",
-    "Secrets 설정 상태, RAG 문서, CSV, fallback 사용 여부를 파일럿 기준으로 점검합니다.",
+    "Secrets 설정 상태, RAG 문서, CSV, 공공데이터 7종 API 상태를 파일럿 기준으로 점검합니다.",
     "B2G",
 )
 render_disclaimer_box(get_disclaimer("general"))
@@ -88,9 +119,8 @@ config_status = list_config_status()
 mobility = load_mobility_center_data()
 protected_zone = load_protected_zone_data()
 low_floor_bus = load_low_floor_bus_data()
-weather = fetch_weather_stub()
-bus = fetch_bus_stub()
-facility = fetch_public_facility_stub()
+weather_stub = fetch_weather_stub()
+facility_stub = fetch_public_facility_stub()
 vision = vision_status()
 voice = voice_status()
 email = email_status()
@@ -121,7 +151,7 @@ ops_cards = [
     ("이동지원 후보 요청", 7, "prototype_dummy", "info"),
     ("AI 제보 검토 대기", 3, "prototype_dummy", "warning"),
     ("생활체육 리포트", 5, "prototype_dummy", "purple"),
-    ("외부 API 상태", "fallback 가능", "자동 호출 없음", "muted"),
+    ("공공데이터 7종", "버튼 점검", "자동 호출 없음", "muted"),
 ]
 cols = st.columns(4)
 for col, (label, value, helper, status) in zip(cols, ops_cards):
@@ -145,7 +175,7 @@ qa_rows = [
     {"item": "OpenRouter Text Model", "status": text_model_status, "note": "버튼 실행 시에만 연결 테스트"},
     {"item": "OpenRouter Vision Model", "status": vision_model_status, "note": "이미지 분석은 업로드 후에만 실행"},
     {"item": "VWorld API Key", "status": vworld_key_status, "note": "주소 변환 실패 시 mock 좌표 사용"},
-    {"item": "DATA GO KR Key", "status": data_go["data_status"], "note": "실제 endpoint 호출은 9단계 예정"},
+    {"item": "DATA GO KR Key", "status": data_go["data_status"], "note": "공공데이터 7종은 별도 버튼으로만 호출"},
     {"item": "SendGrid", "status": sendgrid_status, "note": "기본 disabled 권장"},
     {"item": "RAG Docs", "status": rag_docs_status, "note": rag_index.data_status},
     {"item": "CSV Data", "status": csv_status, "note": "real_csv 또는 mock_fallback"},
@@ -171,6 +201,28 @@ with qa_cols[2]:
         render_status_badge(s(result["status"]), status_style(str(result["status"])))
         st.caption(s(f"reason={result['reason']} has_coordinate={result['has_coordinate']}"))
 
+render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 아래 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")
+if st.button("공공데이터 7종 상태 점검", use_container_width=True):
+    st.session_state["public_data_api_results"] = run_public_data_api_checks()
+
+public_api_results = st.session_state.get("public_data_api_results")
+if public_api_results:
+    rows = public_api_result_rows(public_api_results)
+    st.dataframe(pd.DataFrame(rows), width="stretch")
+    api_cols = st.columns(4)
+    real_count = sum(1 for item in public_api_results if item.get("status") == "real_api")
+    fallback_count = len(public_api_results) - real_count
+    with api_cols[0]:
+        render_metric_card("real_api", real_count, "성공 API 수", "success" if real_count else "muted")
+    with api_cols[1]:
+        render_metric_card("fallback/기타", fallback_count, "성공 외 상태", "warning" if fallback_count else "success")
+    with api_cols[2]:
+        render_metric_card("DATA GO KR", data_go["data_status"], "키 값 미표시", "info" if data_go["data_status"] == "configured" else "warning")
+    with api_cols[3]:
+        render_metric_card("호출 방식", "button", "사용자 실행 기반", "purple")
+else:
+    render_warning_box("공공데이터 7종 API는 아직 호출하지 않았습니다. 버튼을 누르면 결과가 session_state에 저장됩니다.")
+
 render_section_header("CHART", "운영 참고 차트", "plotly 사용 가능 시 plotly, 실패 시 Streamlit bar chart로 표시합니다.")
 chart_frame = pd.DataFrame(
     [
@@ -187,14 +239,13 @@ detail_rows = [
     {"item": "mobility_center", "status": mobility.get("data_status", "missing"), "note": f"rows={len(mobility.get('data', []))}"},
     {"item": "protected_zone", "status": protected_zone.get("data_status", "missing"), "note": f"rows={len(protected_zone.get('data', []))}"},
     {"item": "low_floor_bus", "status": low_floor_bus.get("data_status", "missing"), "note": f"rows={len(low_floor_bus.get('data', []))}"},
-    {"item": "weather_api", "status": weather["data_status"], "note": weather["source"]},
-    {"item": "bus_api", "status": bus["data_status"], "note": bus["source"]},
-    {"item": "facility_api", "status": facility["data_status"], "note": facility["source"]},
+    {"item": "weather_stub", "status": weather_stub["data_status"], "note": weather_stub["source"]},
+    {"item": "facility_stub", "status": facility_stub["data_status"], "note": facility_stub["source"]},
     {"item": "vision", "status": vision["data_status"], "note": "optional"},
     {"item": "voice", "status": voice["data_status"], "note": "optional"},
     {"item": "email", "status": email["data_status"], "note": "optional"},
     {"item": "vworld", "status": vworld["data_status"], "note": "user-triggered test only"},
-    {"item": "data_go_kr", "status": data_go["data_status"], "note": "step 9 integration target"},
+    {"item": "data_go_kr", "status": data_go["data_status"], "note": "7 endpoint checks are button-triggered"},
 ]
 st.dataframe(pd.DataFrame(detail_rows), width="stretch")
 

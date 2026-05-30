@@ -19,11 +19,11 @@
 
 Streamlit 기본 멀티페이지 화면 6개만 둡니다.
 
-- `01_이용자_경로분석.py`: 참고 지도와 Viable Path Scoring AI
-- `02_이동지원_추천.py`: 이동지원 후보 추천과 운영기관 검토 안내
-- `03_생활체육_리포트.py`: 생활체육 참여 참고 리포트
+- `01_이용자_경로분석.py`: 참고 지도, Viable Path Scoring AI, 기상청 단기예보 상태
+- `02_이동지원_추천.py`: 이동지원 후보 추천, 교통약자 이동지원 공공데이터 참고
+- `03_생활체육_리포트.py`: 생활체육 참여 참고 리포트, 체육시설 공공데이터 참고
 - `04_AI_비전검증.py`: 이미지 기반 AI 임시 검토
-- `05_B2G_대시보드.py`: 파일럿 운영 참고 대시보드와 Secrets QA 상태
+- `05_B2G_대시보드.py`: 파일럿 운영 참고 대시보드, Secrets QA, 공공데이터 7종 버튼 기반 점검
 - `06_공문_초안_이메일.py`: 관리자 검증용 공문 초안과 SendGrid 안전장치
 
 ## `modules/`
@@ -34,13 +34,27 @@ Streamlit 기본 멀티페이지 화면 6개만 둡니다.
 - `safety.py`: 금지 표현 치환, 안전 고지, public claim 정리
 - `ui_components.py`: 공통 카드, 배지, 안내 박스 UI
 - `data_loader.py`: CSV 탐색, 안전 로딩, mock fallback
-- `api_clients.py`: VWorld geocode, DATA_GO_KR 설정 상태, 외부 API stub/fallback
+- `api_clients.py`: VWorld geocode, 공공데이터 API 7종, 외부 API stub/fallback
 - `scoring.py`: Viable Path Scoring AI rule-based 계산
 - `rag_bm25.py`: docs Markdown/TXT 기반 BM25 RAG
 - `llm_client.py`: OpenRouter optional 호출과 fallback 답변
 - `voice.py`: 음성 명령 optional UI와 텍스트 fallback
 - `vision.py`: 이미지 AI 임시 검토와 demo fallback
 - `emailer.py`: 관리자 검증용 초안과 SendGrid 전송 안전장치
+
+## 공공데이터 API 7종
+
+`modules/api_clients.py`에서 `DATA_GO_KR_SERVICE_KEY` 하나만 사용합니다.
+
+- 전국체육시설 정보
+- 공공체육시설 상세 정보
+- 장애인편의시설 현황
+- 교통약자 이동지원 현황 실시간 정보
+- 기상청 단기예보 조회서비스
+- TAGO 버스도착정보
+- TAGO 버스노선정보
+
+모든 함수는 `real_api`, `missing_key`, `missing_params`, `api_error`, `timeout`, `network_error`, `parse_error`, `fallback` 계열 상태를 반환하며, 실패 시 앱 실행을 중단하지 않습니다.
 
 ## `docs/`
 
@@ -73,15 +87,6 @@ BM25 RAG 검색 대상 문서 폴더입니다.
 
 - 폴더가 없어도 앱 실행에는 영향이 없습니다.
 - 실제 API 키나 로컬 비밀 파일을 넣지 않습니다.
-
-## 8단계 배포 QA 항목
-
-- OpenRouter 텍스트 모델: 설정 상태와 fallback 동작 확인
-- OpenRouter Vision 모델: 설정 상태와 이미지 업로드 fallback 확인
-- VWorld: 주소 변환 또는 mock 좌표 fallback 확인
-- DATA_GO_KR_SERVICE_KEY: configured/missing 상태만 확인, 실제 endpoint 호출은 9단계 예정
-- SendGrid: `ENABLE_SENDGRID_SEND=false` 상태에서 실제 전송 차단 확인
-- B2G 대시보드: 실제 키 값, 일부 마스킹 값, 길이 정보 미표시 확인
 
 ## 포함하지 않는 파일
 
