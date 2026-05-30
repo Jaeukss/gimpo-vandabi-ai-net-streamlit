@@ -24,6 +24,25 @@ class ApiResult:
     reason: str = ""
 
 
+def _classify_request_error(exc: Exception) -> str:
+    name = exc.__class__.__name__.lower()
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+    if isinstance(exc, requests.ConnectionError):
+        return "network_error"
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code in (401, 403):
+        return "unauthorized"
+    if status_code == 429:
+        return "rate_limit"
+    if status_code:
+        return f"http_{status_code}"
+    if "json" in name:
+        return "invalid_json"
+    return "request_error"
+
+
 def safe_get_json(
     url: str,
     headers: dict[str, str] | None = None,
@@ -35,16 +54,34 @@ def safe_get_json(
         response.raise_for_status()
         return ApiResult(ok=True, data=response.json(), data_status="real_api")
     except Exception as exc:
-        return ApiResult(ok=False, data=None, data_status="mock_fallback", error=str(exc), reason="request_failed")
+        return ApiResult(ok=False, data=None, data_status="mock_fallback", error="", reason=_classify_request_error(exc))
+
+
+def vworld_status() -> dict[str, str | bool]:
+    configured = get_secret("VWORLD_API_KEY") not in (None, "")
+    return {
+        "configured": configured,
+        "data_status": "configured" if configured else "missing",
+        "message": "VWorld API Key 설정 상태만 확인합니다.",
+    }
+
+
+def data_go_kr_status() -> dict[str, str | bool]:
+    configured = get_secret("DATA_GO_KR_SERVICE_KEY") not in (None, "")
+    return {
+        "configured": configured,
+        "data_status": "configured" if configured else "missing",
+        "message": "DATA_GO_KR_SERVICE_KEY는 8단계에서 설정 상태만 확인하며 실제 endpoint 호출은 9단계 대상입니다.",
+    }
 
 
 def geocode_vworld(address: str) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    if not address or not address.strip():
+        return None, {"data_status": "missing_input", "reason": "missing_input"}
+
     api_key = get_secret("VWORLD_API_KEY")
     if not api_key:
-        return None, {"data_status": "missing", "reason": "VWORLD_API_KEY not configured"}
-
-    if not address or not address.strip():
-        return None, {"data_status": "missing", "reason": "address is empty"}
+        return None, {"data_status": "mock_fallback", "reason": "missing_key"}
 
     params = {
         "service": "address",
@@ -58,16 +95,31 @@ def geocode_vworld(address: str) -> tuple[dict[str, Any] | None, dict[str, str]]
 
     result = safe_get_json("https://api.vworld.kr/req/address", params=params, timeout=5)
     if not result.ok:
-        return None, {"data_status": result.data_status, "reason": result.error or result.reason}
+        return None, {"data_status": result.data_status, "reason": result.reason or "request_failed"}
 
     try:
-        point = result.data["response"]["result"]["point"]
+        response = result.data.get("response", {})
+        status = response.get("status", "")
+        if str(status).upper() not in {"OK", "SUCCESS"}:
+            return None, {"data_status": "mock_fallback", "reason": "not_found_or_invalid_response"}
+        point = response["result"]["point"]
         return (
             {"x": point.get("x"), "y": point.get("y"), "raw": result.data},
             {"data_status": "real_api", "reason": ""},
         )
-    except Exception as exc:
-        return None, {"data_status": "mock_fallback", "reason": f"unexpected_response: {exc}"}
+    except Exception:
+        return None, {"data_status": "mock_fallback", "reason": "invalid_response"}
+
+
+def test_vworld_geocode_connection(address: str = "김포반다비체육센터") -> dict[str, Any]:
+    """User-triggered smoke test. It never returns the API key."""
+    geocode, meta = geocode_vworld(address)
+    return {
+        "ok": geocode is not None,
+        "status": meta.get("data_status", "mock_fallback"),
+        "reason": meta.get("reason", ""),
+        "has_coordinate": geocode is not None,
+    }
 
 
 def mock_coordinate(kind: str = "default_origin") -> dict[str, Any]:

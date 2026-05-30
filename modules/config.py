@@ -17,7 +17,7 @@ CONFIG_STATUS_KEYS = (
     "VISION_MODEL",
 )
 
-TRUE_STRINGS = {"true", "1", "yes", "y", "on"}
+TRUE_STRINGS = {"true"}
 
 
 def get_secret(name: str, default: Any = None) -> Any:
@@ -42,17 +42,25 @@ def get_secret(name: str, default: Any = None) -> Any:
 
 
 def get_bool_secret(name: str, default: bool = False) -> bool:
+    """Return True only for boolean True or the string 'true'."""
     value = get_secret(name, None)
     if value is None:
         return default
     if isinstance(value, bool):
-        return value
+        return bool(value)
     return str(value).strip().lower() in TRUE_STRINGS
 
 
-def list_config_status() -> dict[str, bool]:
-    """Return whether supported settings exist without exposing actual values."""
-    return {key: get_secret(key, None) not in (None, "") for key in CONFIG_STATUS_KEYS}
+def get_config_status(name: str) -> str:
+    """Return a safe status label without exposing, masking, or measuring the value."""
+    if name == "ENABLE_SENDGRID_SEND":
+        return "enabled" if get_bool_secret(name, False) else "disabled"
+    return "configured" if get_secret(name, None) not in (None, "") else "missing"
+
+
+def list_config_status() -> dict[str, str]:
+    """Return safe setting states only. Actual values are never returned."""
+    return {key: get_config_status(key) for key in CONFIG_STATUS_KEYS}
 
 
 def get_setting(name: str, default: Any = "") -> Any:
@@ -66,4 +74,5 @@ def get_bool_setting(name: str, default: bool = False) -> bool:
 
 
 def configured(name: str) -> bool:
-    return get_secret(name, None) not in (None, "")
+    """Backward-compatible boolean status helper."""
+    return get_config_status(name) in {"configured", "enabled"}

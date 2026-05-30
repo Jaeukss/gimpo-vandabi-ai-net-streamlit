@@ -16,34 +16,71 @@ VISION_NOTICE = (
 )
 
 
+def _classify_vision_error(exc: Exception) -> str:
+    name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    if "timeout" in name or "timeout" in message:
+        return "timeout"
+    if "unauthorized" in name or "authentication" in name or "401" in message or "403" in message:
+        return "unauthorized"
+    if "rate" in name or "429" in message:
+        return "rate_limit"
+    if "image" in message or "vision" in message or "model" in message:
+        return "unsupported_or_model_error"
+    if "connection" in name or "network" in message or "dns" in message:
+        return "network_error"
+    return "request_error"
+
+
 def mask_notice() -> str:
-    return sanitize_public_claims("사람 얼굴, 차량번호, 연락처, 주소 상세정보 등 개인정보 마스킹 필요 여부를 관리자 확인 단계에서 점검해야 합니다.")
+    return sanitize_public_claims(
+        "얼굴, 차량번호, 연락처, 상세 주소 등 개인정보가 포함될 수 있어 관리자 확인 단계에서 마스킹 필요 여부를 점검해야 합니다."
+    )
 
 
 def vision_status() -> dict[str, str | bool]:
     api_key = get_secret("OPENROUTER_API_KEY")
     model = get_secret("VISION_MODEL")
     if api_key and model:
-        return {"configured": True, "data_status": "configured", "message": "비전 모델 설정이 감지되었습니다."}
-    if api_key:
+        return {"configured": True, "data_status": "configured", "message": "Vision 모델 설정이 감지되었습니다."}
+    if api_key and not model:
         return {"configured": False, "data_status": "missing_model", "message": "VISION_MODEL 설정이 없어 demo fallback을 사용합니다."}
-    return {"configured": False, "data_status": "missing_key", "message": "비전 모델 키가 없어 demo fallback을 사용합니다."}
+    return {"configured": False, "data_status": "missing_key", "message": "OPENROUTER_API_KEY 설정이 없어 demo fallback을 사용합니다."}
+
+
+def test_vision_model_available() -> dict[str, Any]:
+    """User-triggered status check only. Image analysis is not run here."""
+    status = vision_status()
+    if status["data_status"] == "configured":
+        qa_status = "configured"
+        reason = ""
+    elif status["data_status"] == "missing_model":
+        qa_status = "fallback"
+        reason = "missing_model"
+    else:
+        qa_status = "fallback"
+        reason = "missing_key"
+    return {
+        "ok": bool(status["configured"]),
+        "status": qa_status,
+        "source": "vision_status",
+        "reason": reason,
+        "message": sanitize_public_claims(str(status["message"])),
+    }
 
 
 def demo_vision_fallback(report_type: str, description: str = "") -> dict[str, Any]:
     report = report_type or "기타"
-    lowered = f"{report} {description}".lower()
-    risk_level = "중간"
-    if any(term in lowered for term in ("장애물", "화장실", "경사로")):
-        risk_level = "높음"
-    elif "표지" in lowered:
+    combined = f"{report} {description}"
+    risk_level = "낮음"
+    if any(term in combined for term in ("경사로", "장애물", "화장실")):
         risk_level = "중간"
-    else:
-        risk_level = "낮음"
+    if any(term in combined for term in ("차단", "위험", "불편", "부족")):
+        risk_level = "높음"
 
     detected_items = [sanitize_public_claims(report)]
     if description:
-        detected_items.append(sanitize_public_claims("사용자 설명 기반 확인 항목 포함"))
+        detected_items.append(sanitize_public_claims("사용자 설명 기반 확인 후보 포함"))
 
     return {
         "ok": False,
@@ -55,6 +92,7 @@ def demo_vision_fallback(report_type: str, description: str = "") -> dict[str, A
         "notice": sanitize_public_claims(VISION_NOTICE),
         "mask_notice": mask_notice(),
         "source": "demo_fallback",
+        "reason": "fallback",
     }
 
 
@@ -62,16 +100,22 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
     api_key = get_secret("OPENROUTER_API_KEY")
     model = get_secret("VISION_MODEL")
 
+    if not image_bytes:
+        result = demo_vision_fallback(report_type, description)
+        result["reason"] = "missing_input"
+        result["message"] = "이미지 입력이 없어 demo fallback 결과를 표시합니다."
+        return result
+
     if not api_key:
         result = demo_vision_fallback(report_type, description)
         result["source"] = "missing_key"
+        result["reason"] = "missing_key"
         return result
 
     if not model:
-        return demo_vision_fallback(report_type, description)
-
-    if not image_bytes:
-        return demo_vision_fallback(report_type, description)
+        result = demo_vision_fallback(report_type, description)
+        result["reason"] = "missing_model"
+        return result
 
     try:
         from openai import OpenAI
@@ -84,7 +128,7 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
                 {
                     "role": "system",
                     "content": (
-                        "접근성 이미지 임시 검토를 수행한다. 공식 판단으로 단정하지 않는다. "
+                        "접근성 이미지 임시 검토를 수행한다. 공식 판단처럼 단정하지 않는다. "
                         "개인정보 마스킹 필요 여부와 관리자 확인 필요 여부를 포함한다."
                     ),
                 },
@@ -95,7 +139,7 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
                             "type": "text",
                             "text": (
                                 f"제보 유형: {report_type}\n설명: {description}\n"
-                                "risk_level, detected_items, review_required, recommended_next_step을 한국어로 요약."
+                                "risk_level, detected_items, review_required, recommended_next_step를 한국어로 요약."
                             ),
                         },
                         {
@@ -109,6 +153,10 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
             max_tokens=500,
         )
         text = sanitize_public_claims(completion.choices[0].message.content or "")
+        if not text.strip():
+            result = demo_vision_fallback(report_type, description)
+            result["reason"] = "empty_response"
+            return result
         return {
             "ok": True,
             "risk_level": "관리자 확인 필요",
@@ -119,9 +167,12 @@ def analyze_accessibility_image(image_bytes: bytes | None, report_type: str, des
             "notice": sanitize_public_claims(VISION_NOTICE),
             "mask_notice": mask_notice(),
             "source": "vision_model",
+            "reason": "",
         }
-    except Exception:
-        return demo_vision_fallback(report_type, description)
+    except Exception as exc:
+        result = demo_vision_fallback(report_type, description)
+        result["reason"] = _classify_vision_error(exc)
+        return result
 
 
 def summarize_image_upload(filename: str | None, size: int | None = None) -> dict[str, str | int | None]:
