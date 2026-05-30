@@ -4,123 +4,134 @@ import streamlit as st
 
 import modules.llm_client as llm_client
 import modules.rag_bm25 as rag_bm25
-from modules.safety import DATA_FALLBACK_NOTICE, SERVICE_DISCLAIMER
-from modules.ui_components import feature_card, info_box, inject_base_styles, metric_card, section_header, status_badge
+from modules.safety import DATA_FALLBACK_NOTICE, SERVICE_DISCLAIMER, sanitize_public_claims
+from modules.ui_components import (
+    inject_global_styles,
+    render_app_header,
+    render_disclaimer_box,
+    render_info_card,
+    render_metric_card,
+    render_page_footer_note,
+    render_section_header,
+    render_status_badge,
+    render_warning_box,
+)
 from modules.voice import render_browser_tts_button, render_voice_command_box
 
 
-st.set_page_config(
-    page_title="김포시 반다비 AI Net",
-    page_icon="♿",
-    layout="wide",
-)
+st.set_page_config(page_title="김포 반다비 AI Net", page_icon="♿", layout="wide")
+inject_global_styles()
 
-inject_base_styles()
 
-st.title("김포시 반다비 AI Net")
-st.caption("공공서비스, 모빌리티, 생활체육 지원을 위한 Streamlit 파일럿 플랫폼")
+def s(text: str) -> str:
+    return sanitize_public_claims(text)
+
 
 with st.sidebar:
-    section_header("음성 명령", "음성 입력은 optional이며 텍스트 fallback을 제공합니다.")
+    render_section_header("ACCESSIBILITY", "접근성 안내", "고대비 카드 UI와 명확한 텍스트 배지를 사용합니다.")
     voice_result = render_voice_command_box("app_sidebar")
-    st.caption(f"intent={voice_result['intent']}")
+    render_status_badge(f"intent={voice_result['intent']}", "info")
+    render_disclaimer_box("음성 입력은 optional입니다. 음성 파일은 저장하지 않으며 텍스트 fallback을 제공합니다.")
 
-info_box(SERVICE_DISCLAIMER)
-
-col_status, col_docs, col_data = st.columns(3)
-with col_status:
-    metric_card("서비스 단계", "1단계", "멀티페이지 프로젝트 골격")
-with col_docs:
-    metric_card("RAG 문서", "Markdown", ".md 및 .md.md 대응 예정")
-with col_data:
-    metric_card("Fallback", "Enabled", DATA_FALLBACK_NOTICE)
-
-st.divider()
-
-section_header(
-    "주요 화면",
-    "왼쪽 사이드바에서 Streamlit 기본 멀티페이지 화면을 선택합니다.",
+render_app_header(
+    "김포 반다비 AI Net 파일럿",
+    "교통약자 이동지원 · 생활체육 참여 · 접근성 검증을 연결하는 AI 의사결정 보조 시스템",
+    "Pilot QA",
 )
+render_disclaimer_box(SERVICE_DISCLAIMER)
 
-row1 = st.columns(3)
-with row1[0]:
-    feature_card("이용자 경로분석", "출발지, 도착지, 접근성 요소를 기반으로 참고 분석 결과를 구성합니다.")
-with row1[1]:
-    feature_card("이동지원 후보 추천", "운영기관 검토 요청에 필요한 이동지원 후보 정보를 정리합니다.")
-with row1[2]:
-    feature_card("생활체육 리포트", "김포반다비센터 생활체육 추천과 지도자 확인 필요 항목을 정리합니다.")
+top_cols = st.columns(3)
+with top_cols[0]:
+    render_metric_card("서비스 상태", "파일럿", "fallback 우선 구조", "info")
+with top_cols[1]:
+    render_metric_card("RAG 문서", "BM25", ".md · .md.md · .txt", "purple")
+with top_cols[2]:
+    render_metric_card("안전 고지", "필수", DATA_FALLBACK_NOTICE, "warning")
 
-row2 = st.columns(3)
-with row2[0]:
-    feature_card("AI 비전검증", "이미지 업로드 기반 접근성 확인 흐름을 optional 기능으로 확장합니다.")
-with row2[1]:
-    feature_card("B2G 대시보드", "CSV 데이터와 운영 지표를 안전하게 표시하는 관리자 화면입니다.")
-with row2[2]:
-    feature_card("공문 초안 이메일", "관리자 검증용 공문 초안과 SendGrid 발송 옵션을 분리합니다.")
+render_section_header("SERVICE AREAS", "B2C / B2G 사용 영역", "사용자 분석 흐름과 기관 검토 흐름을 분리해 표시합니다.")
 
-st.divider()
+b2c, b2g = st.columns(2)
+with b2c:
+    render_info_card(
+        "B2C 사용자 영역",
+        "경로 참고 분석, 이동지원 후보 추천, 생활체육 참여 리포트를 제공합니다. 결과는 참고 정보이며 운영기관과 지도자 확인이 필요합니다.",
+        "B2C",
+        "info",
+    )
+with b2g:
+    render_info_card(
+        "B2G 관리자 영역",
+        "AI 임시 검토, 운영 참고 대시보드, 관리자 검증용 공문 초안을 제공합니다. 공식 절차 전환 전 담당자 확인이 필요합니다.",
+        "B2G",
+        "purple",
+    )
 
-section_header("운영 원칙")
-status_badge("Public repo safe")
-st.write("- API 키는 `st.secrets` 또는 환경변수에서만 읽습니다.")
-st.write("- `.streamlit/secrets.toml`은 생성하지 않습니다.")
-st.write("- 외부 API 실패, 문서 없음, CSV 없음 상황에서도 앱 실행을 유지합니다.")
+page_cols = st.columns(3)
+with page_cols[0]:
+    render_info_card("01 경로분석", "참고 좌표와 접근성 점수를 함께 확인합니다.", "01", "success")
+with page_cols[1]:
+    render_info_card("02 이동지원 후보", "운영기관 검토용 후보 정보를 정리합니다.", "02", "info")
+with page_cols[2]:
+    render_info_card("03 생활체육 리포트", "참여 기록과 문서 근거를 카드형 리포트로 정리합니다.", "03", "purple")
 
-st.divider()
+page_cols_2 = st.columns(3)
+with page_cols_2[0]:
+    render_info_card("04 AI 비전검증", "이미지 제보를 임시 검토 결과로 정리합니다.", "04", "warning")
+with page_cols_2[1]:
+    render_info_card("05 B2G 대시보드", "파일럿 상태와 fallback 사용 여부를 점검합니다.", "05", "success")
+with page_cols_2[2]:
+    render_info_card("06 공문 초안", "관리자 검증용 초안과 발송 안전장치를 분리합니다.", "06", "info")
 
-section_header(
-    "RAG 문서 질문 테스트",
-    "`docs/`의 `.md`, `.md.md`, `.txt` 문서를 BM25로 검색하고 OpenRouter 또는 로컬 fallback 답변을 표시합니다.",
-)
-
+render_section_header("RAG TEST", "RAG 문서 질문 테스트", "`docs/` 문서를 BM25로 검색하고 OpenRouter 또는 로컬 fallback 답변을 표시합니다.")
 rag_index = rag_bm25.build_index("docs")
-rag_col1, rag_col2, rag_col3 = st.columns(3)
-with rag_col1:
-    metric_card("docs 상태", rag_index.data_status, f"documents={len(rag_index.documents)}")
-with rag_col2:
-    metric_card("검색기", rag_index.search_status, f"chunks={len(rag_index.chunks)}")
-with rag_col3:
-    metric_card("읽기 오류", len(rag_index.errors), "errors")
+
+rag_stats = st.columns(3)
+with rag_stats[0]:
+    render_metric_card("docs 상태", rag_index.data_status, f"documents={len(rag_index.documents)}", "info")
+with rag_stats[1]:
+    render_metric_card("검색기", rag_index.search_status, f"chunks={len(rag_index.chunks)}", "purple")
+with rag_stats[2]:
+    render_metric_card("읽기 오류", len(rag_index.errors), "errors", "warning" if rag_index.errors else "success")
 
 if rag_index.errors:
     with st.expander("문서 읽기 오류"):
         for error in rag_index.errors:
-            st.write(f"- {error}")
+            st.write(s(f"- {error}"))
 
-rag_question = st.text_input(
-    "문서 질문",
-    placeholder="예: 반다비 프로그램 이용 시 확인해야 할 점은?",
-)
-rag_top_k = st.slider("검색 결과 수", min_value=1, max_value=8, value=5)
+with st.container():
+    rag_question = st.text_input("문서 질문", placeholder="예: 반다비 프로그램 이용 시 확인해야 할 점은?")
+    rag_top_k = st.slider("검색 결과 수", min_value=1, max_value=8, value=5)
 
-if st.button("RAG 검색 및 답변 생성", type="primary"):
-    if not rag_question.strip():
-        st.warning("질문을 입력하세요.")
-    else:
-        results = rag_bm25.search(rag_question, top_k=rag_top_k, index=rag_index)
-        context = rag_bm25.format_context(results)
+    if st.button("RAG 검색 및 답변 생성", type="primary"):
+        if not rag_question.strip():
+            render_warning_box("질문을 입력하세요.")
+        else:
+            results = rag_bm25.search(rag_question, top_k=rag_top_k, index=rag_index)
+            context = rag_bm25.format_context(results)
 
-        if results:
-            st.dataframe(
-                [
-                    {
-                        "rank": item["rank"],
-                        "source_file": item["source_file"],
-                        "heading": item["heading"],
-                        "score": item["score"],
+            if results:
+                st.dataframe(
+                    [
+                        {
+                            "rank": item["rank"],
+                            "source_file": item["source_file"],
+                            "heading": item["heading"],
+                            "score": item["score"],
                     }
                     for item in results
                 ],
-                use_container_width=True,
+                width="stretch",
             )
-        else:
-            st.info("검색된 문서 근거가 없습니다. fallback 답변을 표시합니다.")
+            else:
+                render_warning_box("검색된 문서 근거가 없습니다. fallback 답변을 표시합니다.")
 
-        with st.expander("검색 context"):
-            st.text_area("context", context, height=260)
+            with st.expander("검색 context"):
+                st.text_area("context", context, height=260)
 
-        answer = llm_client.generate_rag_answer(rag_question, context)
-        st.subheader("답변")
-        st.write(answer["text"])
-        render_browser_tts_button(str(answer["text"])[:700])
-        st.caption(f"source={answer.get('source', 'fallback')}, reason={answer.get('reason', '')}")
+            answer = llm_client.generate_rag_answer(rag_question, context)
+            render_section_header("ANSWER", "답변", "OpenRouter 실패 또는 키 누락 시 로컬 fallback을 사용합니다.")
+            st.write(s(str(answer["text"])))
+            render_browser_tts_button(str(answer["text"])[:700])
+            render_status_badge(f"source={answer.get('source', 'fallback')}", "muted")
+
+render_page_footer_note()
