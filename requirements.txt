@@ -1,0 +1,13 @@
+streamlit>=1.36
+pandas
+numpy
+requests
+rank_bm25
+python-dotenv
+pymupdf
+openai
+plotly
+folium
+streamlit-folium
+sendgrid
+streamlit-mic-recorder
