@@ -31,9 +31,11 @@ render_disclaimer_box("담당자 확인 후 공식 절차 전환 가능 여부�
 email_info = email_status()
 cols = st.columns(3)
 with cols[0]:
-    render_metric_card("SendGrid 상태", s(str(email_info["data_status"])), "기본 비활성 안전장치", "warning" if not email_info["can_send"] else "success")
+    sendgrid_style = "info" if not email_info["enabled"] else ("success" if email_info["can_send"] else "warning")
+    sendgrid_helper = "실제 발송 비활성화" if not email_info["enabled"] else "발송 전 확인 필요"
+    render_metric_card("SendGrid 상태", s(str(email_info["data_status"])), sendgrid_helper, sendgrid_style)
 with cols[1]:
-    render_metric_card("발송 활성화", "enabled" if email_info["enabled"] else "disabled", "ENABLE_SENDGRID_SEND", "info")
+    render_metric_card("발송 활성화", "enabled" if email_info["enabled"] else "disabled", "기본 비활성 안전 상태", "info")
 with cols[2]:
     render_metric_card("발신 이메일", "configured" if email_info["has_sender"] else "missing", "값 미표시", "muted")
 
@@ -72,12 +74,12 @@ if saved:
     if not confirmed:
         render_warning_box("확인 체크박스를 선택해야 발송 버튼을 사용할 수 있습니다.")
     if not send_status["can_send"]:
-        render_warning_box("ENABLE_SENDGRID_SEND, SENDGRID_API_KEY, EMAIL_ADDRESS 설정이 모두 충족되지 않아 실제 발송은 차단됩니다.")
+        render_warning_box("발송 관련 설정과 발신자 설정이 모두 충족되지 않아 실제 발송은 차단됩니다. SendGrid disabled는 오류가 아니라 정상 안전 상태일 수 있습니다.")
 
-    if st.button(s("SendGrid로 초안 발송"), disabled=not send_allowed):
+    if st.button(s("SendGrid로 검토용 초안 전송"), disabled=not send_allowed):
         result = send_email_with_sendgrid(saved["to_email"], saved["title"], saved["text"])
         if result.ok:
-            render_info_card("발송 결과", s(result.message), status="success")
+            render_info_card("전송 요청 결과", s(result.message), status="success")
         else:
             render_warning_box(s(result.message))
 else:

@@ -63,9 +63,16 @@ if uploaded is not None:
     st.image(uploaded, caption=s("업로드 이미지 미리보기"), width="stretch")
 
 if submitted:
-    image_bytes = uploaded.getvalue() if uploaded is not None else None
-    result = analyze_accessibility_image(image_bytes, report_type, f"{location}\n{description}")
-    st.session_state["vision_result"] = result
+    if uploaded is None:
+        st.session_state.pop("vision_result", None)
+        st.warning("이미지를 업로드하면 AI 임시 검토를 실행할 수 있습니다.")
+    else:
+        image_bytes = uploaded.getvalue()
+        result = analyze_accessibility_image(image_bytes, report_type, f"{location}\n{description}")
+        st.session_state["vision_result"] = result
+
+if uploaded is None and not submitted:
+    st.session_state.pop("vision_result", None)
 
 saved = st.session_state.get("vision_result")
 if saved:
@@ -77,6 +84,8 @@ if saved:
         render_metric_card("관리자 검토", "필요" if saved.get("review_required") else "권장", "review", "purple")
     with result_cols[2]:
         render_metric_card("분석 소스", s(display_analysis_source(saved.get("source"))), "AI 임시 검토", "muted")
+    if saved.get("source") in {"demo_fallback", "missing_key"}:
+        render_warning_box("비전 모델 실응답을 확인하지 못해 시연용 대체 응답을 표시합니다. 이 결과는 공식 증거, 민원, 행정자료가 아닙니다.")
 
     for item in saved.get("detected_items", []):
         render_info_card("검출 후보", s(str(item)), status="info")
@@ -86,6 +95,6 @@ if saved:
     render_disclaimer_box(REQUIRED_NOTICE)
     render_status_badge("AI 임시 검토 결과", "warning")
 else:
-    render_warning_box("이미지, 제보 유형, 위치 설명을 입력한 뒤 AI 임시 검토를 실행하세요.")
+    render_warning_box("이미지를 업로드하면 AI 임시 검토를 실행할 수 있습니다.")
 
 render_page_footer_note()

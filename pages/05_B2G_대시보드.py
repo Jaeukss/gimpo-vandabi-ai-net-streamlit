@@ -85,11 +85,36 @@ def public_api_result_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
 
 
+def vworld_action_needed(result: dict[str, Any]) -> str:
+    status = str(result.get("status", ""))
+    reason_code = str(result.get("reason_code", result.get("reason", "")))
+    if status == "real_api":
+        return "없음"
+    if status == "missing_key":
+        return "VWORLD_API_KEY Secret 등록 필요"
+    if reason_code in {"connection_error", "network_error", "timeout", "ssl_error"}:
+        return "VWorld 접속/도메인/IP 허용/네트워크 확인 필요"
+    if reason_code in {"invalid_key", "incorrect_key", "unavailable_key"}:
+        return "VWorld API 키 상태 확인 필요"
+    if reason_code == "no_result":
+        return "검색어 또는 주소 표기 확인 필요"
+    return str(result.get("action_needed", "VWorld 설정, 검색어, 주소 표기 확인 필요"))
+
+
+def clean_optional_tago_input(value: str, route_number: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if route_number and cleaned == route_number:
+        return None
+    return cleaned
+
+
 def run_public_data_api_checks(city_code: str, node_id: str, route_id: str, route_no: str) -> list[dict[str, Any]]:
-    city = city_code.strip() or None
-    node = node_id.strip() or None
-    route = route_id.strip() or None
     route_number = route_no.strip() or DEFAULT_TAGO_ROUTE_NO
+    city = clean_optional_tago_input(city_code, route_number)
+    node = clean_optional_tago_input(node_id, route_number)
+    route = clean_optional_tago_input(route_id, route_number)
     return [
         fetch_sports_facilities(keyword="김포"),
         fetch_sports_facility_detail(facility_name="김포반다비체육센터"),
@@ -169,8 +194,8 @@ csv_status = "loaded" if not inventory.empty else "empty"
 qa_rows = [
     {"item": "OpenRouter Text Model", "status": text_model_status, "note": "버튼 실행 시에만 연결 테스트"},
     {"item": "OpenRouter Vision Model", "status": vision_model_status, "note": "이미지 분석은 업로드 후에만 실행"},
-    {"item": "VWorld API Key", "status": vworld_key_status, "note": "주소 변환 실패 시 시연용 대체 좌표 사용"},
-    {"item": "DATA GO KR Key", "status": data_go["data_status"], "note": "공공데이터 7종은 별도 버튼으로만 호출"},
+    {"item": "VWorld 설정", "status": vworld_key_status, "note": "주소 변환 실패 시 시연용 대체 좌표 사용"},
+    {"item": "DATA GO KR 설정", "status": data_go["data_status"], "note": "공공데이터 7종은 별도 버튼으로만 호출"},
     {"item": "SendGrid", "status": sendgrid_status, "note": "기본 disabled 권장"},
     {"item": "RAG Docs", "status": rag_docs_status, "note": rag_index.data_status},
     {"item": "CSV Data", "status": csv_status, "note": "real_csv 또는 안전 대체 데이터"},
@@ -187,15 +212,19 @@ qa_cols = st.columns(3)
 with qa_cols[0]:
     if st.button("OpenRouter 텍스트 간단 연결 테스트", width="stretch"):
         result = test_openrouter_text_connection()
-        render_status_badge(s(result["status"]), status_style(str(result["status"])))
-        st.caption(s(f"source={result['source']} reason={result['reason']}"))
-        st.write(s(result["text"]))
+        result_status = str(result.get("status", "fallback"))
+        result_reason = result.get("reason_code", result.get("reason", ""))
+        render_status_badge(s(result_status), status_style(result_status))
+        st.caption(s(f"source={result.get('source', '')} reason={result_reason}"))
+        st.write(s(result.get("text", "")))
 with qa_cols[1]:
     if st.button("Vision 설정 상태 확인", width="stretch"):
         result = test_vision_model_available()
-        render_status_badge(s(result["status"]), status_style(str(result["status"])))
-        st.caption(s(f"source={result['source']} reason={result['reason']}"))
-        st.write(s(result["message"]))
+        result_status = str(result.get("status", "fallback"))
+        result_reason = result.get("reason_code", result.get("reason", ""))
+        render_status_badge(s(result_status), status_style(result_status))
+        st.caption(s(f"source={result.get('source', '')} reason={result_reason}"))
+        st.write(s(result.get("message", "")))
 with qa_cols[2]:
     if st.button("VWorld 주소 변환 간단 테스트", width="stretch"):
         vworld_results = [
@@ -215,6 +244,7 @@ with qa_cols[2]:
                         "has_coordinate": item.get("has_coordinate", False),
                         "search_type": item.get("search_type", ""),
                         "address_type_tried": item.get("address_type_tried", ""),
+                        "action_needed": vworld_action_needed(item),
                         "display_message": item.get("display_message", ""),
                     }
                     for item in vworld_results
@@ -225,26 +255,28 @@ with qa_cols[2]:
         if any(item.get("status") != "real_api" for item in vworld_results):
             render_warning_box("VWorld 주소 변환 API가 일시적으로 응답하지 않아 시연용 대체 좌표를 사용할 수 있습니다. 좌표는 참고용이며 실제 현장 위치 검증이 필요합니다.")
 
-render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")
+render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 버튼을 누를 때만 공공데이터 설정 기반 호출을 시도합니다.")
 render_disclaimer_box("real_api는 실제 공공데이터 응답을 받은 상태입니다. real_api_no_data는 API 호출은 정상이나 현재 조건에 해당하는 데이터가 없는 상태입니다. fallback은 실API 성공이 아니라 앱 안정성을 위한 대체 응답입니다.")
 render_disclaimer_box("TAGO 버스도착정보는 실시간 데이터 특성상 현재 시점에 도착 예정 정보가 없을 수 있습니다.")
+st.caption("cityCode, routeId, nodeId를 모르면 비워두세요. 비워두면 김포/81번 기준 자동탐색을 시도합니다.")
 tago_cols = st.columns(4)
 with tago_cols[0]:
     tago_route_no = st.text_input("TAGO routeNo", value=DEFAULT_TAGO_ROUTE_NO, help="기본 시연값입니다. 직접 수정할 수 있습니다.")
 with tago_cols[1]:
-    tago_city_code = st.text_input("TAGO cityCode", value="", help="비워두면 김포 cityCode 자동탐색을 시도합니다.")
+    tago_city_code = st.text_input("TAGO cityCode", value="", placeholder="모르면 비워두세요", help="비워두면 김포 cityCode 자동탐색을 시도합니다.")
 with tago_cols[2]:
-    tago_route_id = st.text_input("TAGO routeId", value="", help="직접 입력값이 있으면 우선 사용합니다.")
+    tago_route_id = st.text_input("TAGO routeId", value="", placeholder="모르면 비워두세요", help="직접 입력값이 있으면 우선 사용합니다.")
 with tago_cols[3]:
-    tago_node_id = st.text_input("TAGO nodeId", value="", help="직접 입력값이 있으면 도착정보에 우선 사용합니다.")
+    tago_node_id = st.text_input("TAGO nodeId", value="", placeholder="모르면 비워두세요", help="직접 입력값이 있으면 도착정보에 우선 사용합니다.")
 
 if st.button("공공데이터 7종 상태 점검", width="stretch"):
+    route_number = tago_route_no.strip() or DEFAULT_TAGO_ROUTE_NO
     st.session_state["public_data_api_results"] = run_public_data_api_checks(tago_city_code, tago_node_id, tago_route_id, tago_route_no)
     st.session_state["public_data_api_tago_inputs"] = {
-        "route_no": tago_route_no or DEFAULT_TAGO_ROUTE_NO,
-        "city_code": tago_city_code,
-        "route_id": tago_route_id,
-        "node_id": tago_node_id,
+        "route_no": route_number,
+        "city_code": clean_optional_tago_input(tago_city_code, route_number) or "",
+        "route_id": clean_optional_tago_input(tago_route_id, route_number) or "",
+        "node_id": clean_optional_tago_input(tago_node_id, route_number) or "",
     }
 
 public_api_results = st.session_state.get("public_data_api_results")
@@ -289,8 +321,8 @@ detail_rows = [
     {"item": "mobility_center", "status": mobility.get("data_status", "missing"), "note": f"rows={len(mobility.get('data', []))}"},
     {"item": "protected_zone", "status": protected_zone.get("data_status", "missing"), "note": f"rows={len(protected_zone.get('data', []))}"},
     {"item": "low_floor_bus", "status": low_floor_bus.get("data_status", "missing"), "note": f"rows={len(low_floor_bus.get('data', []))}"},
-    {"item": "weather_stub", "status": weather_stub["data_status"], "note": weather_stub["source"]},
-    {"item": "facility_stub", "status": facility_stub["data_status"], "note": facility_stub["source"]},
+    {"item": "weather_stub", "status": "preview_stub", "note": "실제 API 호출은 아래 공공데이터 7종 상태 점검 버튼 실행 시 수행"},
+    {"item": "facility_stub", "status": "preview_stub", "note": "실제 API 호출은 아래 공공데이터 7종 상태 점검 버튼 실행 시 수행"},
     {"item": "vision", "status": vision["data_status"], "note": "optional"},
     {"item": "voice", "status": voice["data_status"], "note": "optional"},
     {"item": "email", "status": email["data_status"], "note": "optional"},

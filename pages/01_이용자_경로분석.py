@@ -41,6 +41,7 @@ def resolve_coordinate(address: str, fallback_kind: str) -> dict:
                 "source": meta.get("source", ""),
                 "reason": meta.get("reason", ""),
                 "reason_code": meta.get("reason_code", ""),
+                "action_needed": meta.get("action_needed", ""),
                 "search_type": meta.get("search_type", ""),
                 "address_type_tried": meta.get("address_type_tried", ""),
                 "display_message": meta.get("display_message", ""),
@@ -57,6 +58,7 @@ def resolve_coordinate(address: str, fallback_kind: str) -> dict:
         "source": meta.get("source", "fallback"),
         "reason": meta.get("reason", "mock_coordinate"),
         "reason_code": meta.get("reason_code", meta.get("reason", "mock_coordinate")),
+        "action_needed": meta.get("action_needed", "VWorld 설정, 검색어, 주소 표기 확인 필요"),
         "search_type": meta.get("search_type", ""),
         "address_type_tried": meta.get("address_type_tried", ""),
         "display_message": meta.get("display_message", "VWorld 실응답을 확인하지 못해 시연용 대체 좌표를 사용했습니다."),
@@ -193,6 +195,7 @@ def render_route_result(saved: dict) -> None:
             "status": origin_coord.get("data_status", ""),
             "source": origin_coord.get("source", ""),
             "reason_code": origin_coord.get("reason_code", ""),
+            "action_needed": origin_coord.get("action_needed", ""),
             "search_type": origin_coord.get("search_type", ""),
             "address_type_tried": origin_coord.get("address_type_tried", ""),
             "message": origin_coord.get("display_message", ""),
@@ -202,6 +205,7 @@ def render_route_result(saved: dict) -> None:
             "status": destination_coord.get("data_status", ""),
             "source": destination_coord.get("source", ""),
             "reason_code": destination_coord.get("reason_code", ""),
+            "action_needed": destination_coord.get("action_needed", ""),
             "search_type": destination_coord.get("search_type", ""),
             "address_type_tried": destination_coord.get("address_type_tried", ""),
             "message": destination_coord.get("display_message", ""),
@@ -236,7 +240,7 @@ render_disclaimer_box("장소명은 VWorld 장소 검색 API를 우선 사용하
 with st.form("route_form"):
     col1, col2 = st.columns(2)
     with col1:
-        origin = st.text_input(s("출발지"), placeholder=s("예: 운양역, 경기도 김포시 사우중로 1"))
+        origin = st.text_input(s("출발지"), value=s("운양역"), placeholder=s("예: 운양역, 경기도 김포시 사우중로 1"))
         use_date = st.date_input(s("이용 희망일"))
         support_type = st.selectbox(
             s("접근성 지원 필요 유형"),
@@ -258,19 +262,23 @@ with st.form("route_form"):
     submitted = st.form_submit_button(s("경로 참고 분석"))
 
 if submitted:
-    store_route_result(
-        {
-            "origin": origin,
-            "destination": destination,
-            "use_date": str(use_date),
-            "use_time": str(use_time),
-            "accessibility_support_type": support_type,
-            "mobility_support_needed": mobility_needed,
-            "companion_needed": companion_needed,
-            "weather_enabled": weather_enabled,
-            "public_transport_available": public_transport_available,
-        }
-    )
+    if not origin.strip() or not destination.strip():
+        st.session_state.pop("route_analysis_result", None)
+        st.warning("출발지와 목적지를 모두 입력하세요.")
+    else:
+        store_route_result(
+            {
+                "origin": origin,
+                "destination": destination,
+                "use_date": str(use_date),
+                "use_time": str(use_time),
+                "accessibility_support_type": support_type,
+                "mobility_support_needed": mobility_needed,
+                "companion_needed": companion_needed,
+                "weather_enabled": weather_enabled,
+                "public_transport_available": public_transport_available,
+            }
+        )
 
 saved_result = st.session_state.get("route_analysis_result")
 if saved_result and saved_result.get("show_map"):
