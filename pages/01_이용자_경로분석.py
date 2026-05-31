@@ -38,7 +38,12 @@ def resolve_coordinate(address: str, fallback_kind: str) -> dict:
                 "lon": float(geocode["x"]),
                 "label": address,
                 "data_status": meta.get("data_status", "real_api"),
+                "source": meta.get("source", ""),
                 "reason": meta.get("reason", ""),
+                "reason_code": meta.get("reason_code", ""),
+                "search_type": meta.get("search_type", ""),
+                "address_type_tried": meta.get("address_type_tried", ""),
+                "display_message": meta.get("display_message", ""),
             }
         except Exception:
             pass
@@ -49,7 +54,12 @@ def resolve_coordinate(address: str, fallback_kind: str) -> dict:
         "lon": float(mock["lon"]),
         "label": address or mock["label"],
         "data_status": meta.get("data_status", "mock_fallback"),
+        "source": meta.get("source", "fallback"),
         "reason": meta.get("reason", "mock_coordinate"),
+        "reason_code": meta.get("reason_code", meta.get("reason", "mock_coordinate")),
+        "search_type": meta.get("search_type", ""),
+        "address_type_tried": meta.get("address_type_tried", ""),
+        "display_message": meta.get("display_message", "VWorld 실응답을 확인하지 못해 시연용 대체 좌표를 사용했습니다."),
     }
 
 
@@ -152,7 +162,7 @@ def render_route_result(saved: dict) -> None:
     render_section_header("MAP", "참고 지도", f"{inputs['origin'] or '출발지 미입력'} → {inputs['destination'] or '목적지 미입력'}", "지도")
     render_info_card(
         "참고 좌표 기반 시각화",
-        "아래 지도는 실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. VWorld 주소 변환 API가 일시적으로 응답하지 않으면 시연용 대체 좌표를 사용합니다.",
+        "아래 지도는 실제 보행 경로가 아닌 참고 좌표 기반 시각화입니다. 장소명은 VWorld 장소 검색 API를 우선 사용하고, 주소형 입력은 주소 변환 API를 사용합니다. 검색 실패 시 시연용 대체 좌표를 사용할 수 있습니다.",
         status="info",
     )
     render_reference_map(origin_coord, destination_coord)
@@ -166,7 +176,9 @@ def render_route_result(saved: dict) -> None:
     with col_level:
         render_metric_card("등급", s(result["mobility_level"]), s(result["ai_name"]), "purple")
     with col_source:
-        render_metric_card("좌표 상태", f"{origin_coord['data_status']} / {destination_coord['data_status']}", "origin / destination", "warning")
+        coord_status = f"{origin_coord['data_status']} / {destination_coord['data_status']}"
+        coord_status_style = "success" if origin_coord["data_status"] == "real_api" and destination_coord["data_status"] == "real_api" else "warning"
+        render_metric_card("좌표 상태", coord_status, "origin / destination", coord_status_style)
     with col_weather:
         render_metric_card(
             "기상 API",
@@ -175,6 +187,27 @@ def render_route_result(saved: dict) -> None:
             "success" if weather_status == "real_api" else "warning",
         )
     render_status_badge(f"기상 요약: {weather_summary_text(weather_result)}", "success" if weather_status == "real_api" else "warning")
+    coord_rows = [
+        {
+            "구분": "출발지",
+            "status": origin_coord.get("data_status", ""),
+            "source": origin_coord.get("source", ""),
+            "reason_code": origin_coord.get("reason_code", ""),
+            "search_type": origin_coord.get("search_type", ""),
+            "address_type_tried": origin_coord.get("address_type_tried", ""),
+            "message": origin_coord.get("display_message", ""),
+        },
+        {
+            "구분": "목적지",
+            "status": destination_coord.get("data_status", ""),
+            "source": destination_coord.get("source", ""),
+            "reason_code": destination_coord.get("reason_code", ""),
+            "search_type": destination_coord.get("search_type", ""),
+            "address_type_tried": destination_coord.get("address_type_tried", ""),
+            "message": destination_coord.get("display_message", ""),
+        },
+    ]
+    st.dataframe(pd.DataFrame(coord_rows), width="stretch")
 
     render_section_header("SCORE", "주요 사유", "점수 항목과 확인 필요 사항입니다.")
     st.dataframe(pd.DataFrame([{"항목": key, "점수": value} for key, value in result["item_scores"].items()]), width="stretch")
@@ -198,11 +231,12 @@ render_app_header(
     "B2C",
 )
 render_disclaimer_box(get_disclaimer("mobility"))
+render_disclaimer_box("장소명은 VWorld 장소 검색 API를 우선 사용하고, 주소형 입력은 주소 변환 API를 사용합니다. 검색 실패 시 시연용 대체 좌표를 사용할 수 있습니다.")
 
 with st.form("route_form"):
     col1, col2 = st.columns(2)
     with col1:
-        origin = st.text_input(s("출발지"), placeholder=s("예: 김포시청, 운양역"))
+        origin = st.text_input(s("출발지"), placeholder=s("예: 운양역, 경기도 김포시 사우중로 1"))
         use_date = st.date_input(s("이용 희망일"))
         support_type = st.selectbox(
             s("접근성 지원 필요 유형"),

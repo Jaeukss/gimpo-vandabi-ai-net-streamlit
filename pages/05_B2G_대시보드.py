@@ -177,6 +177,12 @@ qa_rows = [
 ]
 st.dataframe(pd.DataFrame(qa_rows), width="stretch")
 
+vworld_input_cols = st.columns(2)
+with vworld_input_cols[0]:
+    vworld_place_query = st.text_input("VWorld 장소명 테스트", value="운양역")
+with vworld_input_cols[1]:
+    vworld_address_query = st.text_input("VWorld 주소형 테스트", value="경기도 김포시 사우중로 1")
+
 qa_cols = st.columns(3)
 with qa_cols[0]:
     if st.button("OpenRouter 텍스트 간단 연결 테스트", width="stretch"):
@@ -192,10 +198,31 @@ with qa_cols[1]:
         st.write(s(result["message"]))
 with qa_cols[2]:
     if st.button("VWorld 주소 변환 간단 테스트", width="stretch"):
-        result = test_vworld_geocode_connection()
-        render_status_badge(s(result["status"]), status_style(str(result["status"])))
-        st.caption(s(f"reason={result['reason']} has_coordinate={result['has_coordinate']}"))
-        if result.get("status") != "real_api":
+        vworld_results = [
+            {"input_type": "PLACE", **test_vworld_geocode_connection(vworld_place_query)},
+            {"input_type": "ADDRESS", **test_vworld_geocode_connection(vworld_address_query)},
+        ]
+        for result in vworld_results:
+            render_status_badge(s(f"{result['input_type']} {result['status']}"), status_style(str(result["status"])))
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "input_type": item.get("input_type", ""),
+                        "status": item.get("status", ""),
+                        "source": item.get("source", ""),
+                        "reason_code": item.get("reason_code", ""),
+                        "has_coordinate": item.get("has_coordinate", False),
+                        "search_type": item.get("search_type", ""),
+                        "address_type_tried": item.get("address_type_tried", ""),
+                        "display_message": item.get("display_message", ""),
+                    }
+                    for item in vworld_results
+                ]
+            ),
+            width="stretch",
+        )
+        if any(item.get("status") != "real_api" for item in vworld_results):
             render_warning_box("VWorld 주소 변환 API가 일시적으로 응답하지 않아 시연용 대체 좌표를 사용할 수 있습니다. 좌표는 참고용이며 실제 현장 위치 검증이 필요합니다.")
 
 render_section_header("PUBLIC API", "공공데이터 API 7종 연동 상태", "자동 호출하지 않으며, 버튼을 누를 때만 DATA_GO_KR_SERVICE_KEY 기반 호출을 시도합니다.")

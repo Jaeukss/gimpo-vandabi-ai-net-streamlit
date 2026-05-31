@@ -19,6 +19,8 @@ MOBILITY_SUPPORT_URL = "https://apis.data.go.kr/B551982/tsdo_v2"
 WEATHER_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0"
 BUS_ARRIVAL_URL = "https://apis.data.go.kr/1613000/ArvlInfoInqireService"
 BUS_ROUTE_URL = "https://apis.data.go.kr/1613000/BusRouteInfoInqireService"
+VWORLD_SEARCH_URL = "https://api.vworld.kr/req/search"
+VWORLD_ADDRESS_URL = "https://api.vworld.kr/req/address"
 
 GIMPO_STDG_CD = "4157000000"
 DEFAULT_TAGO_ROUTE_NO = "81"
@@ -227,49 +229,195 @@ def data_go_kr_status() -> dict[str, str | bool]:
     }
 
 
-def geocode_vworld(address: str) -> tuple[dict[str, Any] | None, dict[str, str]]:
-    if not address or not address.strip():
-        return None, {"data_status": "missing_input", "reason": "missing_input"}
+def _vworld_display_message(source: str) -> str:
+    messages = {
+        "vworld_search": "VWorld 장소 검색 API로 좌표를 확인했습니다.",
+        "vworld_address_road": "VWorld 도로명주소 변환으로 좌표를 확인했습니다.",
+        "vworld_address_parcel": "VWorld 지번주소 변환으로 좌표를 확인했습니다.",
+        "fallback": "VWorld 실응답을 확인하지 못해 시연용 대체 좌표를 사용했습니다.",
+    }
+    return messages.get(source, messages["fallback"])
 
-    api_key = get_secret("VWORLD_API_KEY")
-    if not api_key:
-        return None, {"data_status": "mock_fallback", "reason": "missing_key"}
 
+def _vworld_meta(status: str, reason_code: str, source: str = "fallback", **extra: str) -> dict[str, str]:
+    meta = {
+        "data_status": status,
+        "status": status,
+        "source": source,
+        "reason": reason_code,
+        "reason_code": reason_code,
+        "display_message": _vworld_display_message(source),
+    }
+    meta.update({key: str(value) for key, value in extra.items() if value not in (None, "")})
+    return meta
+
+
+def _classify_vworld_request_error(exc: Exception) -> str:
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+    if isinstance(exc, requests.exceptions.SSLError):
+        return "ssl_error"
+    if isinstance(exc, requests.ConnectionError):
+        return "connection_error"
+    return "network_error"
+
+
+def _classify_vworld_status(response: dict[str, Any], default: str = "no_result") -> str:
+    body = response.get("response", {}) if isinstance(response, dict) else {}
+    status = str(body.get("status", "")).upper()
+    if status == "NOT_FOUND":
+        return "no_result"
+    if status == "ERROR":
+        error = body.get("error", {})
+        code = str(error.get("code", "")).upper()
+        return {
+            "INVALID_KEY": "invalid_key",
+            "INCORRECT_KEY": "incorrect_key",
+            "UNAVAILABLE_KEY": "unavailable_key",
+            "OVER_REQUEST_LIMIT": "over_request_limit",
+            "PARAM_REQUIRED": "param_required",
+        }.get(code, "api_error")
+    return default
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _call_vworld_json(endpoint: str, params: dict[str, Any], timeout: int = 8) -> tuple[dict[str, Any] | None, str]:
+    try:
+        response = requests.get(endpoint, params=params, timeout=timeout)
+        response.raise_for_status()
+        return response.json(), ""
+    except ValueError:
+        return None, "parse_error"
+    except Exception as exc:
+        return None, _classify_vworld_request_error(exc)
+
+
+def _search_vworld_place(query: str, api_key: str) -> tuple[dict[str, Any] | None, dict[str, str]]:
     params = {
-        "service": "address",
-        "request": "getcoord",
+        "service": "search",
+        "request": "search",
+        "version": "2.0",
+        "crs": "EPSG:4326",
+        "query": query,
+        "type": "PLACE",
         "format": "json",
-        "crs": "epsg:4326",
-        "type": "road",
-        "address": address,
+        "errorFormat": "json",
+        "size": 10,
+        "page": 1,
         "key": api_key,
     }
+    data, error = _call_vworld_json(VWORLD_SEARCH_URL, params=params, timeout=8)
+    if error:
+        return None, _vworld_meta("mock_fallback", error, search_type="PLACE")
 
-    result = safe_get_json("https://api.vworld.kr/req/address", params=params, timeout=5)
-    if not result.ok:
-        return None, {"data_status": result.data_status, "reason": result.reason or "request_failed"}
+    response = data.get("response", {}) if isinstance(data, dict) else {}
+    status = str(response.get("status", "")).upper()
+    if status != "OK":
+        return None, _vworld_meta("mock_fallback", _classify_vworld_status(data or {}), search_type="PLACE")
 
-    try:
-        response = result.data.get("response", {})
-        status = response.get("status", "")
-        if str(status).upper() not in {"OK", "SUCCESS"}:
-            return None, {"data_status": "mock_fallback", "reason": "not_found_or_invalid_response"}
-        point = response["result"]["point"]
+    items_container = response.get("result", {}).get("items", {})
+    items = items_container.get("item") if isinstance(items_container, dict) else items_container
+    for item in _as_list(items):
+        if not isinstance(item, dict):
+            continue
+        point = item.get("point") or {}
+        x = point.get("x")
+        y = point.get("y")
+        if x not in (None, "") and y not in (None, ""):
+            return (
+                {
+                    "x": x,
+                    "y": y,
+                    "title": item.get("title", ""),
+                    "road_address": (item.get("address") or {}).get("road", ""),
+                    "parcel_address": (item.get("address") or {}).get("parcel", ""),
+                },
+                _vworld_meta("real_api", "place_search_ok", "vworld_search", search_type="PLACE"),
+            )
+    return None, _vworld_meta("mock_fallback", "no_coordinate", search_type="PLACE")
+
+
+def _address_vworld_getcoord(query: str, api_key: str, address_type: str) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    normalized_type = address_type.upper()
+    params = {
+        "service": "address",
+        "request": "GetCoord",
+        "version": "2.0",
+        "crs": "EPSG:4326",
+        "address": query,
+        "format": "json",
+        "errorFormat": "json",
+        "type": normalized_type,
+        "refine": "true",
+        "simple": "false",
+        "key": api_key,
+    }
+    data, error = _call_vworld_json(VWORLD_ADDRESS_URL, params=params, timeout=8)
+    source = "vworld_address_road" if normalized_type == "ROAD" else "vworld_address_parcel"
+    if error:
+        return None, _vworld_meta("mock_fallback", error, address_type_tried=normalized_type)
+
+    response = data.get("response", {}) if isinstance(data, dict) else {}
+    status = str(response.get("status", "")).upper()
+    if status != "OK":
+        return None, _vworld_meta("mock_fallback", _classify_vworld_status(data or {}), address_type_tried=normalized_type)
+
+    point = response.get("result", {}).get("point") or {}
+    x = point.get("x")
+    y = point.get("y")
+    if x not in (None, "") and y not in (None, ""):
         return (
-            {"x": point.get("x"), "y": point.get("y"), "raw": result.data},
-            {"data_status": "real_api", "reason": ""},
+            {"x": x, "y": y},
+            _vworld_meta("real_api", f"address_{normalized_type.lower()}_ok", source, address_type_tried=normalized_type),
         )
-    except Exception:
-        return None, {"data_status": "mock_fallback", "reason": "invalid_response"}
+    return None, _vworld_meta("mock_fallback", "no_coordinate", address_type_tried=normalized_type)
 
 
-def test_vworld_geocode_connection(address: str = "김포반다비체육센터") -> dict[str, Any]:
+def geocode_vworld(address: str) -> tuple[dict[str, Any] | None, dict[str, str]]:
+    query = (address or "").strip()
+    if not query:
+        return None, _vworld_meta("missing_input", "missing_input")
+
+    api_key = str(get_secret("VWORLD_API_KEY", "") or "").strip()
+    if not api_key:
+        return None, _vworld_meta("missing_key", "missing_key")
+
+    place_result, place_meta = _search_vworld_place(query, api_key)
+    if place_result:
+        return place_result, place_meta
+
+    road_result, road_meta = _address_vworld_getcoord(query, api_key, "ROAD")
+    if road_result:
+        return road_result, road_meta
+
+    parcel_result, parcel_meta = _address_vworld_getcoord(query, api_key, "PARCEL")
+    if parcel_result:
+        return parcel_result, parcel_meta
+
+    final_reason = parcel_meta.get("reason_code") or road_meta.get("reason_code") or place_meta.get("reason_code") or "no_result"
+    tried = ",".join(filter(None, [place_meta.get("search_type"), road_meta.get("address_type_tried"), parcel_meta.get("address_type_tried")]))
+    return None, _vworld_meta("mock_fallback", final_reason, tried=tried)
+
+
+def test_vworld_geocode_connection(address: str = "운양역") -> dict[str, Any]:
     geocode, meta = geocode_vworld(address)
     return {
         "ok": geocode is not None,
         "status": meta.get("data_status", "mock_fallback"),
+        "source": meta.get("source", "fallback"),
         "reason": meta.get("reason", ""),
+        "reason_code": meta.get("reason_code", ""),
         "has_coordinate": geocode is not None,
+        "search_type": meta.get("search_type", ""),
+        "address_type_tried": meta.get("address_type_tried", ""),
+        "display_message": meta.get("display_message", _vworld_display_message("fallback")),
     }
 
 
